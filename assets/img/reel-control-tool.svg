@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" role="img" aria-label="リール制御ジェネレータ">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0c1016"/>
+      <stop offset="0.45" stop-color="#131a24"/>
+      <stop offset="1" stop-color="#0f1419"/>
+    </linearGradient>
+    <radialGradient id="topGlow" cx="0.5" cy="0" r="0.9">
+      <stop offset="0" stop-color="#b388ff" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#b388ff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 図柄（セル中心 0,0 基準） -->
+    <g id="red7">
+      <text x="0" y="21" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="58" font-weight="800" font-style="italic" fill="#ff5c6c" stroke="#7a1220" stroke-width="1.5">7</text>
+    </g>
+    <g id="blue7">
+      <text x="0" y="21" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="58" font-weight="800" font-style="italic" fill="#4fc3f7" stroke="#0d4a6b" stroke-width="1.5">7</text>
+    </g>
+    <g id="bar">
+      <rect x="-33" y="-19" width="66" height="38" rx="6" fill="#14181f" stroke="#8a94a3" stroke-width="2"/>
+      <text x="0" y="8" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="22" font-weight="800" font-style="italic" fill="#e6edf3">BAR</text>
+    </g>
+    <g id="bell">
+      <path d="M -17 12 Q -17 -18 0 -18 Q 17 -18 17 12 L 23 18 L -23 18 Z" fill="#ffd24d" stroke="#b8860b" stroke-width="2"/>
+      <circle cx="0" cy="23" r="5" fill="#ffd24d" stroke="#b8860b" stroke-width="1.5"/>
+    </g>
+    <g id="cherry">
+      <path d="M 2 -22 Q 6 -8 -7 6" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"/>
+      <path d="M 2 -22 Q 16 -4 13 8" fill="none" stroke="#2e7d32" stroke-width="3" stroke-linecap="round"/>
+      <ellipse cx="8" cy="-22" rx="9" ry="4" fill="#5ad469" transform="rotate(-18 8 -22)"/>
+      <circle cx="-8" cy="12" r="11" fill="#ff5c6c" stroke="#a2242f" stroke-width="2"/>
+      <circle cx="13" cy="14" r="11" fill="#ff5c6c" stroke="#a2242f" stroke-width="2"/>
+    </g>
+    <g id="melon">
+      <circle cx="0" cy="0" r="18" fill="#5ad469" stroke="#2e7d32" stroke-width="2.5"/>
+      <path d="M -7 -16 Q -9 0 -7 16 M 0 -18 Q -2 0 0 18 M 7 -16 Q 9 0 7 16" fill="none" stroke="#2e7d32" stroke-width="2"/>
+    </g>
+    <g id="rp">
+      <rect x="-29" y="-15" width="58" height="30" rx="15" fill="#1c6ea4" stroke="#4fc3f7" stroke-width="2"/>
+      <text x="0" y="7" text-anchor="middle" font-family="'Segoe UI',sans-serif" font-size="19" font-weight="700" fill="#dff3ff">RP</text>
+    </g>
+  </defs>
+
+  <!-- 背景 -->
+  <rect width="800" height="500" fill="url(#bg)"/>
+  <rect width="800" height="260" fill="url(#topGlow)"/>
+
+  <!-- 中段ライン（有効ライン） -->
+  <line x1="140" y1="250" x2="660" y2="250" stroke="#ffb02e" stroke-width="10" opacity="0.18" filter="url(#glow)"/>
+  <line x1="140" y1="250" x2="660" y2="250" stroke="#ffb02e" stroke-width="3" opacity="0.5"/>
+
+  <!-- セル枠：枠上/枠下（薄） -->
+  <g opacity="0.28">
+    <rect x="196" y="50" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="340" y="50" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="484" y="50" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="196" y="370" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="340" y="370" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="484" y="370" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <use href="#cherry" transform="translate(256,90)"/>
+    <use href="#bell" transform="translate(400,90)"/>
+    <use href="#melon" transform="translate(544,90)"/>
+    <use href="#rp" transform="translate(256,410)"/>
+    <use href="#bar" transform="translate(400,410)"/>
+    <use href="#blue7" transform="translate(544,410)"/>
+  </g>
+
+  <!-- セル枠：上/中/下段 -->
+  <g>
+    <rect x="196" y="130" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="340" y="130" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="484" y="130" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="196" y="210" width="120" height="80" rx="8" fill="#20293a" stroke="#ffb02e" stroke-width="2.5"/>
+    <rect x="340" y="210" width="120" height="80" rx="8" fill="#20293a" stroke="#ffb02e" stroke-width="2.5"/>
+    <rect x="484" y="210" width="120" height="80" rx="8" fill="#20293a" stroke="#ffb02e" stroke-width="2.5"/>
+    <rect x="196" y="290" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="340" y="290" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+    <rect x="484" y="290" width="120" height="80" rx="8" fill="#1a2230" stroke="#2c3a4d" stroke-width="1.5"/>
+  </g>
+
+  <!-- 上段・下段の図柄 -->
+  <use href="#bar" transform="translate(256,170)"/>
+  <use href="#rp" transform="translate(400,170)"/>
+  <use href="#bell" transform="translate(544,170)"/>
+  <use href="#bell" transform="translate(256,330)"/>
+  <use href="#melon" transform="translate(400,330)"/>
+  <use href="#cherry" transform="translate(544,330)"/>
+
+  <!-- 中段：赤7が揃った（引き込み成功） -->
+  <g filter="url(#glow)">
+    <use href="#red7" transform="translate(256,250)"/>
+    <use href="#red7" transform="translate(400,250)"/>
+    <use href="#red7" transform="translate(544,250)"/>
+  </g>
+
+  <!-- スベリ矢印（右リールが滑って中段へ） -->
+  <g stroke="#4fc3f7" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 626 152 L 636 162 L 646 152" opacity="0.35"/>
+    <path d="M 626 182 L 636 192 L 646 182" opacity="0.6"/>
+    <path d="M 626 212 L 636 222 L 646 212" opacity="0.95"/>
+  </g>
+
+  <!-- フッター：バリデータ出力 -->
+  <text x="400" y="484" text-anchor="middle" font-family="Consolas,Menlo,monospace" font-size="26" fill="#8fa5bb">ValidSlips() → [0, 2, 4]</text>
+</svg>
