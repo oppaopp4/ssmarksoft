@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>全状態 リール制御 ＆ バリデータ生成</title>
+<style>
+  :root{--bg:#0f1419;--panel:#1a2230;--panel2:#222d3d;--ink:#e6edf3;--muted:#9fb0c3;--accent:#ffb02e;--accent2:#4fc3f7;--green:#5ad469;--red:#ff5c6c;--purple:#b388ff;--border:#2c3a4d;--code:#0b0f15;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN","Yu Gothic UI",Meiryo,sans-serif;background:linear-gradient(180deg,#0c1016,#0f1419 40%);color:var(--ink);line-height:1.6;font-size:14px;}
+  .wrap{max-width:1440px;margin:0 auto;padding:0 18px 90px;}
+  header{background:radial-gradient(1000px 320px at 50% -80px,rgba(179,136,255,.16),transparent),linear-gradient(160deg,#16202e,#0f1722);border-bottom:1px solid var(--border);padding:26px 18px 20px;text-align:center;}
+  header h1{font-size:1.5rem;margin:0 0 6px;background:linear-gradient(90deg,#d6b3ff,#7fd4ff);-webkit-background-clip:text;background-clip:text;color:transparent;}
+  header p{color:var(--muted);margin:0;font-size:.86rem;}
+  .prev{margin-top:8px;font-size:.78rem;} .prev a{color:var(--accent2);text-decoration:none;}
+  h2{font-size:1rem;color:var(--accent2);margin:0 0 10px;padding-left:9px;border-left:4px solid var(--accent2);}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;}
+  .full{grid-column:1/-1;}
+  @media(max-width:980px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:15px 17px;}
+  .card>h2{cursor:pointer;user-select:none;}
+  .card>h2::before{content:'▼ ';font-size:.72em;color:var(--muted);vertical-align:middle;}
+  .card.collapsed>h2::before{content:'▶ ';}
+  .card.collapsed>h2{margin-bottom:0;}
+  .card.collapsed>*:not(h2){display:none !important;}
+  label{font-size:.8rem;color:var(--muted);display:block;margin:9px 0 3px;}
+  textarea,input[type=text]{width:100%;background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:"Consolas",monospace;font-size:.8rem;line-height:1.5;resize:vertical;}
+  input[type=color]{width:30px;height:26px;padding:0;border:1px solid var(--border);border-radius:5px;background:var(--code);cursor:pointer;}
+  button{background:linear-gradient(90deg,#b388ff,#8e6bff);color:#1a0f33;border:none;border-radius:9px;padding:12px 26px;font-weight:bold;font-size:1rem;cursor:pointer;font-family:inherit;}
+  button:hover{filter:brightness(1.08);}
+  button.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--border);font-weight:normal;padding:7px 14px;font-size:.84rem;}
+  button.tiny{padding:3px 9px;font-size:.72rem;border-radius:7px;}
+  button.add{background:var(--panel2);color:var(--accent2);border:1px dashed var(--accent2);font-weight:normal;padding:6px 14px;font-size:.82rem;border-radius:8px;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  .hint{font-size:.8rem;color:var(--muted);background:rgba(179,136,255,.07);border-left:3px solid var(--purple);padding:9px 12px;border-radius:0 8px 8px 0;margin:10px 0;}
+  .hint b{color:#d6c7f5;} code{background:rgba(255,255,255,.06);padding:1px 5px;border-radius:4px;color:#ffd479;font-family:Consolas,monospace;}
+  .msg{padding:11px 15px;border-radius:9px;margin:12px 0;font-size:.9rem;}
+  .ok{background:rgba(90,212,105,.13);border:1px solid #2a5230;color:#9fe8a8;}
+  .err{background:rgba(255,92,108,.12);border:1px solid #5a2a30;color:#ff9aa6;}
+  .warn{background:rgba(255,176,46,.1);border:1px solid #5a4423;color:#ffce7a;}
+  table{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:8px;}
+  th,td{border:1px solid var(--border);padding:5px 8px;text-align:left;}
+  th{background:var(--panel2);color:var(--accent2);}
+  .tag{display:inline-block;font-size:.72rem;padding:1px 8px;border-radius:5px;}
+  .k1{background:rgba(255,92,108,.18);color:#ff9aa6;} .k2{background:rgba(255,176,46,.16);color:#ffce7a;} .k3{background:rgba(79,195,247,.16);color:#7fd4ff;}
+  .khaz{background:rgba(123,224,168,.16);color:#7be0a8;} /* 小役ハズレ（HAZリールあり）：1確/2確とは別系統の色 */
+  #reachPanel .tag.khaz{font-size:.37rem;padding:1px 2px;white-space:nowrap;} /* ⑥リーチ目カードの「小役ハズレ」は「1確」と同じ横幅に収める（小フォント） */
+  pre{background:var(--code);border:1px solid var(--border);border-radius:10px;padding:14px;overflow:auto;font-family:Consolas,monospace;font-size:.76rem;max-height:340px;color:#cdd9e5;}
+  .stat{display:flex;gap:14px;flex-wrap:wrap;margin:8px 0;}
+  .stat div{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 13px;font-size:.82rem;}
+  .stat b{color:var(--accent);font-size:1.05rem;}
+  small{color:var(--muted);}
+  .chip{display:inline-flex;align-items:center;justify-content:center;border-radius:6px;font-size:.6rem;font-weight:bold;border:1px solid var(--border);vertical-align:middle;overflow:hidden;line-height:1;text-align:center;}
+  .chip.blank{color:#5b6b7d;background:var(--code);font-weight:normal;}
+  .symrow{display:flex;align-items:center;gap:7px;margin:5px 0;}
+  .filebtn{font-size:.72rem;color:var(--accent2);cursor:pointer;border:1px solid var(--border);border-radius:6px;padding:3px 8px;background:var(--panel2);}
+  .filebtn input{display:none;}
+  .palette{position:sticky;top:0;z-index:9;background:rgba(13,18,24,.96);border:1px solid var(--accent);border-radius:10px;padding:8px 12px;margin-top:14px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+  .pchip{cursor:pointer;border-radius:8px;padding:2px;border:2px solid transparent;}
+  .pchip.active{border-color:var(--accent);background:rgba(255,176,46,.12);}
+  .plabel{font-size:.74rem;color:var(--muted);}
+  .reels{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;margin-top:10px;}
+  .reelcol{text-align:center;} .rlabel{font-size:.82rem;color:var(--muted);margin-bottom:4px;}
+  .strip{display:flex;flex-direction:column;gap:2px;}
+  .scell{width:48px;height:30px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border);border-radius:5px;background:var(--code);position:relative;cursor:pointer;}
+  .scell:hover{border-color:var(--accent);}
+  .scell .si{position:absolute;top:1px;left:3px;font-size:.5rem;color:#5a6b7d;}
+  .cyc{cursor:pointer;display:inline-flex;} .cyc:hover{filter:brightness(1.25);}
+  .srow{display:flex;align-items:center;gap:7px;margin:5px 0;flex-wrap:wrap;}
+  .colhead{display:flex;align-items:center;gap:7px;font-size:.72rem;color:var(--muted);margin-top:6px;}
+  .rolename{width:130px;background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-family:inherit;font-size:.82rem;}
+  .recard{border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:8px 0;background:var(--panel2);}
+  .recard.dragover{outline:2px dashed var(--accent);outline-offset:2px;}
+  .recard.rcollapsed{padding:6px 12px;opacity:.95;}
+  .rehead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;}
+  .recard.rcollapsed .rehead{margin-bottom:0;}
+  .grip{cursor:grab;color:var(--muted);font-size:1.1rem;user-select:none;padding:0 2px;}
+  .grip:active{cursor:grabbing;}
+  /* パネル別の色分け（リーチ目＝青寄り／取りこぼし目＝緑寄り。無効化カードの赤背景は除外） */
+  #reachPanel .recard:not(.redisabled){background:#23304a;}
+  #missPanel .recard:not(.redisabled){background:#223a31;}
+  .recard.redisabled{border:1px dashed var(--red);background:rgba(255,92,108,.05);}
+  /* 検証＆生成中オーバーレイ。バーはtransformアニメ＝合成スレッド駆動なので、同期処理でメインスレッドが塞がっていても動き続ける */
+  #busyOverlay{position:fixed;inset:0;background:rgba(11,15,21,.6);display:none;align-items:center;justify-content:center;z-index:90;}
+  #busyOverlay.on{display:flex;}
+  .busybox{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:20px 28px;min-width:300px;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.5);}
+  .busybar{height:8px;margin-top:14px;border-radius:4px;background:var(--code);overflow:hidden;position:relative;}
+  .busybar i{position:absolute;top:0;left:0;width:38%;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent2),var(--accent));will-change:transform;animation:busyslide 1.1s linear infinite;}
+  @keyframes busyslide{from{transform:translateX(-110%);}to{transform:translateX(380%);}}
+  .recard.redisabled .rolename{text-decoration:line-through;color:var(--muted);}
+  .recard.redisabled table.regrid,.recard.redisabled .dimwrap{opacity:.45;filter:grayscale(.7);}
+  .tag.dis{background:rgba(255,92,108,.18);color:#ff9aa6;border:1px dashed var(--red);}
+  table.regrid{width:auto;margin:0;border-collapse:separate;border-spacing:3px;}
+  table.regrid th{background:transparent;color:var(--muted);font-weight:normal;padding:1px 5px;border:none;font-size:.7rem;}
+  table.regrid td{border:1px solid var(--border);padding:2px;cursor:pointer;text-align:center;background:var(--code);border-radius:4px;}
+  table.regrid td:hover{border-color:var(--accent);}
+  .prevd{border:1px solid var(--border);border-radius:8px;margin:6px 0;background:var(--panel2);}
+  .prevd>summary{cursor:pointer;padding:7px 12px;font-size:.85rem;color:var(--accent2);list-style:none;}
+  .prevd>summary::-webkit-details-marker{display:none;}
+  .prevd>summary:before{content:'▶ ';color:var(--muted);}
+  .prevd[open]>summary:before{content:'▼ ';}
+  .mbwrap{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;}
+  .mb{display:inline-flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:6px;padding:3px;background:var(--code);}
+  .mbr{display:flex;gap:2px;}
+  .mbc{width:22px;height:18px;display:inline-flex;align-items:center;justify-content:center;}
+  .mbi{width:22px;text-align:center;font-size:.55rem;color:var(--muted);display:inline-block;}
+  .mbc.on{outline:2px solid var(--accent);border-radius:4px;}
+  .morerow{width:100%;padding:4px 0;}
+  .tcol{text-align:center;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:8px 14px;}
+  .tstep{display:block;width:78px;height:36px;font-size:1.2rem;font-weight:bold;background:var(--panel);color:var(--ink);border:1px solid var(--border);border-radius:8px;cursor:pointer;line-height:1;}
+  .tstep:hover{border-color:var(--accent);background:rgba(255,176,46,.12);}
+  .tval{font-size:1.4rem;font-weight:bold;color:var(--accent);min-width:30px;}
+  .docktoggle{display:none;position:fixed;right:10px;top:10px;z-index:60;background:var(--panel2);color:var(--ink);border:1px solid var(--accent);border-radius:8px;padding:6px 10px;font-size:.74rem;cursor:pointer;font-family:inherit;}
+  .docktoggle:hover{background:rgba(255,176,46,.14);}
+  .reeldock{display:none;position:fixed;right:10px;top:46px;width:252px;max-height:calc(100vh - 56px);overflow:auto;background:rgba(13,18,24,.98);border:1px solid var(--accent);border-radius:10px;padding:8px;z-index:55;box-shadow:0 8px 28px rgba(0,0,0,.45);}
+  .reeldock .ri{font-size:.6rem;color:#5a6b7d;width:15px;text-align:right;display:inline-block;}
+  @media(min-width:981px){ .docktoggle{display:block;} body.dock-open .reeldock{display:block;} body.dock-open .wrap{padding-right:274px;} }
+</style>
+</head>
+<body>
+<header>
+  <h1>全状態 リール制御 ＆ バリデータ生成</h1>
+  <p>ハズレ／小役／ボーナス／<b>重複（小役優先）</b>の全フラグ状態で、<b>合法スベリを引き込み優先順（役を揃える→取りこぼし目→リーチ目/チャンス目→通常目）で返す</b>制御を生成・網羅検証。成果物は JSON / C#（<code>ValidSlips(state,…)</code>）。<b>何コマ滑らせるか（採用）はゲーム側が決めます。</b></p>
+  <div class="prev"><a href="パチスロ_制御設計テクニック_解説.html">◀ 制御設計テクニック編</a> ／ <a href="slot-control-tool.html">出目シミュレータ</a></div>
+</header>
+<div class="wrap">
+
+  <div class="hint">
+    <b>編集方法：</b> 下の<b>図柄ブラシ</b>で図柄を選び、リール帯・小役・ボーナス・リーチ目の各セルを<b>左クリックで配置／右クリックで消去</b>。<br>
+    <b>制御の優先順：</b> 各状態で「<b>成立役を引き込む →（小役は取りこぼし目）→ 引き込み外ならリーチ目（小役取りこぼし時はチャンス目）→ 通常目</b>」。どのスベリでもその状態の<b>禁止目</b>（他役整列・対象外リーチ目 等）は出しません。全押し位置×押し順×前停止で 0〜4 に必ず合法停止が残ることを検証します。<br>
+    <b>新オプション：</b> ④小役の各形に<b>「重複専用」</b>（ボーナス重複時のみ揃う形＝リーチ目リプレイ等）と<b>モード</b>（<b>通常＋BIG中=既定</b>／通常時のみ／<b>BIG中のみ</b>）、<b>⑤取りこぼし目</b>（対象小役を取りこぼした時にリーチ目より先に出す目。対象小役のモードでのみ参照）、⑥リーチ目に<b>「チャンス目可」</b>（小役取りこぼし時に出すガセ目）を指定できます。モードがBIG中を含む小役が1つでもあると状態 <code>BIG中:ハズレ</code>／<code>BIG中:小役:〇〇</code> が生成されます。「通常時のみ」の小役はBIG中では<b>見た目にも揃えません（蹴飛ばし）</b>。
+  </div>
+
+  <div class="palette" id="palette"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>① 図柄の登録（赤7・青7など追加可。色／画像も設定）</h2>
+      <div id="symPanel"></div>
+      <button class="add" style="margin-top:8px;" onclick="addSymbol()">＋ 図柄を追加</button>
+    </div>
+
+    <div class="card">
+      <h2>② ボーナス定義（複数可。揃い形を左中右で指定。例 赤赤青）</h2>
+      <div class="colhead"><span style="width:130px;">ボーナス名</span><span style="width:30px;text-align:center;">左</span><span style="width:30px;text-align:center;">中</span><span style="width:30px;text-align:center;">右</span></div>
+      <div id="bonusPanel"></div>
+      <button class="add" style="margin-top:8px;" onclick="addBonus()">＋ ボーナスを追加</button>
+      <div style="margin-top:8px;"><small>有効ライン：古典5ライン固定。各ボーナスは「揃い形」が有効ライン上に並ぶと整列。<br><b>同じボーナス名を複数行にすると1つのフラグ</b>として扱われ、どの揃い形が並んでも成立扱いになります（例 赤7BIG＝赤赤赤／赤赤青のどちらでもOK）。「複製」で同名の別揃い形を素早く追加できます。</small></div>
+    </div>
+
+    <div class="card full">
+      <h2>③ リール配列（帯のセルを左クリックでブラシ図柄を配置）</h2>
+      <div id="reelStrips" class="reels"></div>
+      <details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--muted);font-size:.8rem;">テキストで一括編集（図柄IDをスペース区切り）</summary>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+          <div style="flex:1;min-width:220px;"><label>左 L</label><textarea id="reelL" rows="2"></textarea></div>
+          <div style="flex:1;min-width:220px;"><label>中 C</label><textarea id="reelC" rows="2"></textarea></div>
+          <div style="flex:1;min-width:220px;"><label>右 R</label><textarea id="reelR" rows="2"></textarea></div>
+        </div>
+        <button class="sec" style="margin-top:8px;" onclick="applyReelText()">テキストをリールに反映</button>
+      </details>
+    </div>
+
+    <div class="card full">
+      <h2>④ 小役入賞形（成立時は引き込み・他状態では禁止目。任意＝ワイルドカードは右クリックで）</h2>
+      <div class="colhead"><span style="width:130px;">役名</span><span style="width:30px;text-align:center;">左</span><span style="width:30px;text-align:center;">中</span><span style="width:30px;text-align:center;">右</span></div>
+      <div id="smallPanel"></div>
+      <button class="add" style="margin-top:8px;" onclick="addSmall()">＋ 小役を追加</button>
+      <div style="margin-top:8px;"><small><b>同じ役名を複数行にすると1つのフラグ</b>として扱われ、いずれの揃い形でも入賞扱いになります。「複製」で同名の別揃い形を追加。<br><b>「重複専用」ON</b>＝そのボーナスとの<b>重複時のみ揃う特殊形</b>（リーチ目リプレイ等）。小役単独・ハズレ・ボーナス単独では出ません（＝出れば重複の信号）。対象ボーナスを指定できます。<br><b>モード</b>＝この小役が成立し得るゲーム状態（<b>既定＝通常＋BIG中</b>）。<b>「BIG中のみ」</b>はBIG中（状態キー <code>BIG中:小役:〇〇</code>）だけで揃い、通常時は<b>不可視</b>（並んでもただのハズレ目＝禁止目にはなりません）。<b>「通常時のみ」</b>はBIG中では<b>見た目にも揃えません（蹴飛ばす＝禁止目）</b>。取りこぼし目は<b>対象小役のモードでのみ参照</b>されます（BIG専用小役の取りこぼし目はBIG中のみ）。BIG中の禁止目は「ボーナス図柄の整列＋通常時のみ小役の整列」で、リーチ目/チャンス目は出ても構いません（狙っては出しません）。</small></div>
+    </div>
+
+    <div class="card full">
+      <h2>⑤ 取りこぼし目定義（小役を取りこぼした時に、リーチ目より先に優先して出す目。5×3グリッド）</h2>
+      <div style="margin-bottom:6px;"><small><b>対象小役</b>を1つ選び、その小役が<b>フラグ成立中に引き込めなかった（取りこぼした）時</b>に、<b>リーチ目より先に</b>優先して出す目を定義します（優先 tier は<b>小役単独フラグ時のみ</b>）。<b>確定目ではありません</b>＝他状態（純ハズレ・他小役・ボーナス・重複）では不問（出てもよい・狙っては出さない）。純ハズレで出したくない場合は同じ形を<b>チャンス目可リーチ目</b>として併設してください（チャンス目は純ハズレ禁止）。グリッドはリーチ目と同じ（図柄／「以外≠」／「小役ﾊｽﾞﾚ」ブラシ）。<br>優先順：<b>①小役揃え → ②取りこぼし目 → ③チャンス目可リーチ目 → ④通常目</b>。②の中では<b>「確定」（その停止を採ればどう止めても取りこぼし目が出る＝もう引き込めている）が「狙い」（後リールの押し位置次第）より優先</b>され、確定があれば確定のスベリのみ返ります。</small></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+        <button class="add" onclick="addMiss()">＋ 取りこぼし目を追加（自動連番）</button>
+        <button class="sec tiny" onclick="missCollapseAll(true)">全て折りたたむ</button>
+        <button class="sec tiny" onclick="missCollapseAll(false)">全て展開</button>
+        <span class="plabel" id="missCount"></span>
+        <span class="plabel">　▲▼ または ⠿ドラッグで並べ替え／タイトル左の ▾ で個別折りたたみ／「無効化」＝削除せず一時的に検証・生成から除外</span>
+      </div>
+      <div id="missPanel" style="max-height:620px;overflow-y:auto;padding-right:4px;"></div>
+      <button class="add" style="margin-top:8px;" onclick="addMiss()">＋ 取りこぼし目を追加（自動連番）</button>
+    </div>
+
+    <div class="card full">
+      <h2>⑥ リーチ目定義（5×3グリッド＝枠上/上/中/下/枠下 × 左中右。空＝不問。制約リール数で 1確/2確/3確 自動分類）</h2>
+      <div style="margin-bottom:6px;"><small><b>「チャンス目可」ON</b>＝小役取りこぼし時にも出す<b>チャンス目</b>（無ボーナスでも出る＝ガセ含む）。OFF＝1確等の純ボーナス前兆（小役状態では一切出さない）。<b>純ハズレでは常に出しません。</b><br><b>「小役ﾊｽﾞﾚ」ブラシ</b>でリールに置くと、その<b>リール(上中下段)が「ハズレ」</b>＝そのリールで小役が揃っていない時のみ<b>一致する条件</b>になります（小役が揃う押し位置では一致せず＝引き込みを邪魔しない）。小役取りこぼし時の<b>小役ハズレ目（チャンス目）</b>として出すには<b>「チャンス目可」もON</b>にしてください（OFF＝ゲチェナ等の純ボーナス前兆＝小役状態では出ません）。</small></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px;">
+        <button class="add" onclick="addReach()">＋ リーチ目を追加（自動連番）</button>
+        <button class="sec tiny" onclick="reachCollapseAll(true)">全て折りたたむ</button>
+        <button class="sec tiny" onclick="reachCollapseAll(false)">全て展開</button>
+        <span class="plabel" id="reachCount"></span>
+        <span class="plabel">　▲▼ または ⠿ドラッグで並べ替え／タイトル左の ▾ で個別折りたたみ／「無効化」＝削除せず一時的に検証・生成から除外</span>
+      </div>
+      <div id="reachPanel" style="max-height:620px;overflow-y:auto;padding-right:4px;"></div>
+      <button class="add" style="margin-top:8px;" onclick="addReach()">＋ リーチ目を追加（自動連番）</button>
+    </div>
+
+    <div class="card full">
+      <h2>⑦ 検証 ＆ 出力</h2>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;">
+        <div><label>押し位置・停止位置の基準段</label><select id="refRow" style="background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;"><option value="0" selected>上段</option><option value="1">中段</option><option value="2">下段</option></select></div>
+        <div><button id="btnGen">▶ 検証＆制御生成</button></div>
+        <div><button class="sec" id="btnDl" disabled>⬇ 制御JSON</button></div>
+        <div><button class="sec" id="btnCs" disabled>⬇ C#(ReelStopValidator.cs)</button></div>
+      </div>
+      <details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--accent2);font-size:.82rem;">▸ C#(ReelStopValidator.cs)の使い方</summary>
+      <div style="font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.8;">
+
+      <b style="color:var(--ink);">これは何？</b><br>
+      各フラグ状態で「合法スベリを<b>引き込み優先順</b>（揃え→リーチ目/チャンス目→通常目）で並べた配列」を返す<b>制御＋バリデータ</b>です。「⬇ C#」を押すと
+      <code>ReelStopValidator.cs</code> が保存され、Unity等に<b>ファイルを1つ追加するだけ</b>で使えます。<b>何コマ滑らせるか（採用）はゲーム側が決めます。</b><br><br>
+
+      <b style="color:var(--ink);">使い方は1つだけ</b><br>
+      リールを1本止めるたびに次を1回呼びます。<b>達成可能な最上位グループのスベリだけ</b>が配列で返ります（引き込めるなら引き込みスベリのみ、無理なら取りこぼし目<b>確定</b>（どう止めても出る）のみ、無ければ取りこぼし目<b>狙い</b>（後リール次第）、次にリーチ目のみ、いずれも無理なら通常目のみ・必ず1要素以上）。どれを採っても安全です。
+      <div style="margin:4px 0 8px;padding:7px 9px;background:var(--code);border-radius:6px;color:var(--ink);">
+      <code>int[] 合法スベリ = ReelStopValidator.ValidSlips(state, order, 停止番号, 既に止めた位置, 押した位置[, スベリ優先]);</code></div>
+
+      <b style="color:var(--ink);">引数</b>
+      <ol style="margin:4px 0 8px;padding-left:1.4em;">
+        <li><code>state</code>（状態）… <code>"ハズレ"</code> / <code>"小役:&lt;名&gt;"</code> / <code>"ボーナス:&lt;名&gt;"</code> / <code>"ボーナス:&lt;名&gt;+小役:&lt;名&gt;"</code>（重複）/ <code>"BIG中:ハズレ"</code> / <code>"BIG中:小役:&lt;名&gt;"</code>（BIG中モード）。定義済みキーは <code>Control.Keys</code></li>
+        <li><code>order</code>（押し順）… <code>"順押し"</code> <code>"ハサミ"</code></li>
+        <li>停止番号 … 1本目=<code>1</code>、2本目=<code>2</code>、3本目=<code>3</code></li>
+        <li>既に止めた位置 … 止めた位置を押した順に並べた配列（1本目は <code>new int[0]</code>）</li>
+        <li>押した位置 … 押下時に「基準段」にあった図柄のindex（0始まり）</li>
+        <li>スベリ優先（任意）… 同じ優先tier内のタイブレーク。省略時 <code>{0,1,2,3,4}</code></li>
+      </ol>
+
+      <b style="color:var(--ink);">出し分け</b>：<code>CanAlign / AlignSlips / MissSlips / ReachSlips / LoseSlips(state, order, step, prior, push)</code> で tier別にも取得可。<br>
+      例「揃えられるなら揃える、無理ならあえてリーチ目（ガセ含む）」→ <code>var a=AlignSlips(...); int s = a.Length>0 ? a[0] : ReachSlips(...)[0];</code><br><br>
+
+      <b style="color:var(--ink);">戻り値</b>：<b>達成可能な最上位グループのスベリだけ</b>を返します（必ず1要素以上）。<b>引き込める→引き込みスベリのみ</b>／<b>引き込めず取りこぼし目可→取りこぼし目スベリのみ</b>／<b>さらに無理でリーチ目可→リーチ目スベリのみ</b>／<b>いずれも不可→通常目のみ</b>。どれを採っても禁止目は出ません。採用したスベリ <code>s</code> から
+      <code>止める位置 = (押した位置 - s + リール長) % リール長</code>（上→下回転＝index 降順に滑る）、<code>基準段の図柄 = Reels[リール][止める位置]</code>。<br>
+      （基準段は⑦のセレクタで上段／中段／下段を選択、<b>既定は上段</b>）<br><br>
+
+      <b style="color:var(--ink);">3本止めるまでの例</b>
+      <div style="margin:4px 0 8px;padding:7px 9px;background:var(--code);border-radius:6px;color:var(--ink);line-height:1.7;">
+      <code>var seq = Control[state][order].Seq;</code><br>
+      <code>int n0=Reels[seq[0]].Length; int s1 = ValidSlips(state, order, 1, new int[0],      p1)[0]; int stop1 = ((p1-s1)%n0+n0)%n0;</code><br>
+      <code>int n1=Reels[seq[1]].Length; int s2 = ValidSlips(state, order, 2, new[]{stop1},        p2)[0]; int stop2 = ((p2-s2)%n1+n1)%n1;</code><br>
+      <code>int n2=Reels[seq[2]].Length; int s3 = ValidSlips(state, order, 3, new[]{stop1, stop2}, p3)[0]; int stop3 = ((p3-s3)%n2+n2)%n2;</code></div>
+      <span style="font-size:.95em;">※ 物理的にどのリールが何本目に止まるかは <code>Control[state][order].Seq</code>（0=左,1=中,2=右）。<code>[0]</code> 以外の任意のスベリを選んでも、その状態の禁止目は出ません。互換用に旧 <code>Haz[...]</code>／<code>ValidSlips(order,…)</code>（ハズレ専用）も併載。</span><br><br>
+
+      <b style="color:var(--ink);">補足</b>：状態の決定（どのフラグを成立させるか・重複抽選）はゲーム側の役割です。さらに詳しい説明は出力 .cs 先頭コメントにも記載。
+      </div></details>
+    </div>
+
+    <div class="card full" id="testerCard" style="display:none;">
+      <h2>⑧ テスター（生成した制御を試す）</h2>
+      <small>⑦で検証成功した制御を使い、<b>フラグ・押し順・各リールの押し位置（基準段で押した瞬間の図柄index）</b>を与えると、各停止の<b>合法スベリ（優先順）</b>と採用手・出目を返します。スベリのチップをクリックで採用手を変更（その停止以降を再計算）。</small>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-end;margin-top:10px;">
+        <div><label>フラグ（状態）</label><select id="tState" onchange="resetTester();runTester()" style="background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;min-width:200px;"></select></div>
+        <div><label>押し順</label><select id="tOrder" onchange="resetTester();runTester()" style="background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:7px 9px;font-family:inherit;"></select></div>
+      </div>
+      <div><label style="margin-top:10px;">各リールの押し位置（基準段＝押した瞬間の図柄index・▲上/▼下で循環）</label>
+        <div id="tSteppers" style="display:flex;gap:18px;flex-wrap:wrap;"></div>
+      </div>
+      <div id="tResult" style="margin-top:14px;"></div>
+    </div>
+  </div>
+  <div id="result"></div>
+
+  <!-- 検証＆制御生成中の進捗表示（run() が表示→1フレーム描画→重い同期処理→非表示） -->
+  <div id="busyOverlay"><div class="busybox"><b>検証＆制御生成中…</b><div class="plabel" style="margin-top:6px;">全状態の制御マスク生成と相互検査を実行しています（構成により数秒かかります）</div><div class="busybar"><i></i></div></div></div>
+</div>
+<button id="dockToggle" class="docktoggle" onclick="toggleDock()" title="リール配列を右側に固定表示（作業中も見比べられる）">◧ リール参照</button>
+<div id="reelDock" class="reeldock"></div>
+
+<script>
+/* ===================== 共通・エンジン ===================== */
+const HAZ='__HAZ__'; // リーチ目グリッドの「ハズレ」リール・マーカー（その列＝そのリールで小役非成立を表す）
+// グリッドセル値（文字列）⇔ 図柄集合。1セルに複数図柄をOR指定可（'/'区切り）。先頭'!'＝集合全体を否定（「どれでもない」）。
+// 例: 'R7'（単一）/ 'R7/WASHI'（赤7またはワシ）/ '!R7'（赤7以外）/ '!R7/B7'（赤7でも青7でもない）。空・HAZは集合なし(null)。
+function parseCell(val){ if(!val||val===HAZ)return null; const neg=val[0]==='!'; const body=neg?val.slice(1):val; const syms=body.split('/').filter(Boolean); return syms.length?{neg,syms}:null; }
+function joinCell(neg,syms){ if(!syms||!syms.length)return null; return (neg?'!':'')+syms.join('/'); }
+function cellSyms(c){ return c.syms||[c.sym]; } // セル/目標cell の図柄集合（旧形 {sym} も両受け）
+const ROWLBL=['枠上','上','中','下','枠下']; // リーチ目グリッドの5段。枠上=row-1 / 上=0 / 中=1 / 下=2 / 枠下=row3（枠上・枠下は有効ライン外＝小役/整列の対象外）
+const LINES=[
+  {name:'上段',rows:[0,0,0]},{name:'中段',rows:[1,1,1]},{name:'下段',rows:[2,2,2]},
+  {name:'右上がり',rows:[2,1,0]},{name:'右下がり',rows:[0,1,2]},
+];
+// 第1停止は左固定。順押し（左→中→右）／ハサミ（左→右→中）の2通りのみ対象。
+const ORDERS=[
+  {name:'順押し',seq:[0,1,2]},{name:'ハサミ',seq:[0,2,1]},
+];
+const RLET=['L','C','R'];
+let REF=0; // 押し位置・停止位置の基準段（0=上段,1=中段,2=下段）。スベリ量は基準に依らず不変。
+
+function symAtRow(reel,mid,row){const n=reel.length;return reel[(((mid+(row-REF))%n)+n)%n];}
+function reachCells(reel,p,cells){const n=reel.length;for(let s=0;s<=4;s++){const mid=(p+s)%n;if(cells.every(c=>cellSyms(c).includes(symAtRow(reel,mid,c.row))))return s;}return -1;}
+function matchLineRole(symArr,line,stops,reels){for(let j=0;j<3;j++){const need=symArr[j];if(need==='*')continue;if(symAtRow(reels[j],stops[j],line.rows[j])!==need)return false;}return true;}
+// 役/ボーナスの「揃い形」一覧。同名は1フラグに集約され forms に複数の揃い形を持つ（旧 sym 単一形も後方互換で受理）。
+function roleForms(r){return r.forms||(r.sym?[r.sym]:[]);} // ボーナス用：forms=揃い形(sym配列)の配列
+// 小役フラグのモード：'both'=通常＋BIG中（既定）/ 'normal'=通常時のみ / 'big'=BIG中のみ。
+// 非対称ルール（§5.3）：
+//  ・'big'（BIG中のみ）の小役は通常時「不可視」＝入賞でも禁止目でもない（並んでもただのハズレ目）。
+//  ・'normal'（通常時のみ）の小役はBIG中では「禁止目」＝見た目にも揃えない（蹴飛ばす）。forbiddenSmallAlign 参照。
+function roleMode(r){return r.mode||'both';}
+function roleInMode(r,mode){const m=roleMode(r);return m==='both'||m===mode;}
+function smallFormAligns(f,stops,cfg){return cfg.lines.some(L=>matchLineRole(f.sym,L,stops,cfg.reels));} // 小役フォーム f={sym,dupOnly,dupTargets}
+function alignsBonus(stops,cfg,k){return roleForms(cfg.bonuses[k]).some(sym=>cfg.lines.some(L=>matchLineRole(sym,L,stops,cfg.reels)));}
+function anyBonusAlign(stops,cfg){for(let k=0;k<cfg.bonuses.length;k++)if(alignsBonus(stops,cfg,k))return true;return false;}
+function isSmallWin(stops,cfg,mode){mode=mode||'normal';return cfg.smallRoles.some(r=>roleInMode(r,mode)&&r.forms.some(f=>smallFormAligns(f,stops,cfg)));} // 指定モード（既定=通常）の小役整列。モード外の小役は不可視＝数えない
+function matchPattern(cells,stops,reels){return cells.every(c=>{const ss=cellSyms(c);const a=symAtRow(reels[c.reel],stops[c.reel],c.row);return c.neg?!ss.includes(a):ss.includes(a);});} // セルは図柄集合（OR）。neg=どれでもない
+// 「ハズレ」リール：そのリールの図柄を使って成立する小役（sym[reel]≠'*'）が一つも揃っていない＝そのリールで小役がハズれた
+// mode（省略時 'normal'）のモードに属する小役だけを見る（モード外の小役は不可視）。
+function hazReelOK(reel,stops,cfg,mode){mode=mode||'normal';for(const r of cfg.smallRoles){if(!roleInMode(r,mode))continue;for(const f of r.forms){if(f.sym[reel]==='*')continue;for(const L of cfg.lines){if(matchLineRole(f.sym,L,stops,cfg.reels))return false;}}}return true;}
+// 図柄/≠セル一致 ＋ 全ハズレリールで小役非成立（生の盤面パターン一致のみ。小役整列の有無は見ない）。取りこぼし目判定の土台。
+function matchEyeRaw(re,stops,cfg,mode){if(!matchPattern(re.cells,stops,cfg.reels))return false;if(re.hazReels)for(const reel of re.hazReels)if(!hazReelOK(reel,stops,cfg,mode))return false;return true;}
+// その盤面で「小役が揃っている（＝リーチ目/チャンス目を打ち消す）」か。BIG中は通常時のみ小役の整列も蹴飛ばし対象として数える。reachEyeInstances と共通規則。
+function smallWinKicks(stops,cfg,mode){return isSmallWin(stops,cfg,mode)||(mode==='big'&&isSmallWin(stops,cfg,'normal'));}
+// リーチ目/チャンス目 re が盤面に出現しているか。図柄/≠セル一致＋全ハズレリールで小役非成立に加え、
+// 「何かしらの小役が揃う盤面はリーチ目でもチャンス目でもない」（小役揃いを明示した型＝smallType を除く・§5/§8）。reachEyeInstances と同一規則。
+function matchEye(re,stops,cfg,mode){if(!matchEyeRaw(re,stops,cfg,mode))return false;
+  if(re.smallType===undefined)re.smallType=reachEyePinsSmallWin(re,cfg); // 小役揃い型（全リールで小役整列形をpin）か。1度算出してキャッシュ
+  if(!re.smallType&&smallWinKicks(stops,cfg,mode))return false; return true;}
+// 小役グループ j がこの盤面で整列しているか
+function smallRoleAligns(j,stops,cfg){return j>=0&&j<cfg.smallRoles.length&&cfg.smallRoles[j].forms.some(f=>smallFormAligns(f,stops,cfg));}
+// 取りこぼし目の一致：パターン一致（生）かつ「対象小役が整列していない」。対象小役が揃う盤面は入賞(=ミスではない)なので取りこぼし目にしない。
+// 取りこぼし目はリーチ目と別概念（§5.2）＝matchEye の小役整列打ち消しは通さず matchEyeRaw を使う。mode＝参照モード（対象小役のモード）。省略時 'normal'。
+function matchMissEye(me,stops,cfg,mode){return matchEyeRaw(me,stops,cfg,mode)&&!smallRoleAligns(me.target,stops,cfg);}
+// リーチ目が取りうる全停止形を網羅（制約セルを満たす各リール停止の直積。整列・小役は除外＝純粋なリーチ目のみ）
+// mode（省略時 'normal'）＝小役除外に使うモード（取りこぼし目をBIG中対象で検証する時は 'big'）。
+function reachEyeInstances(re,cfg,mode){
+  const allow=[0,1,2].map(reel=>{const cs=re.cells.filter(c=>c.reel===reel);const n=cfg.reels[reel].length;const o=[];for(let s=0;s<n;s++){if(cs.every(c=>{const ss=cellSyms(c);const a=symAtRow(cfg.reels[reel],s,c.row);return c.neg?!ss.includes(a):ss.includes(a);}))o.push(s);}return o;});
+  const pinsSmall=reachEyePinsSmallWin(re,cfg); // 小役揃い型リーチ目なら、小役入賞形も「実出目」に含める
+  const out=[];
+  for(const a of allow[0])for(const b of allow[1])for(const c of allow[2]){const st=[a,b,c];
+    if(anyBonusAlign(st,cfg))continue;             // ボーナス揃いは常に除外
+    if(!pinsSmall&&smallWinKicks(st,cfg,mode))continue; // 小役揃い型でなければ小役入賞も除外（matchEye と同一規則。BIG中は通常時のみ小役も蹴飛ばし対象＝除外）
+    out.push(a+'_'+b+'_'+c);}
+  return out;
+}
+function isReachEye(stops,cfg){return cfg.reachEyes.some(re=>matchEye(re,stops,cfg));}
+// ── 状態別 禁止目（acceptable）。状態 st={b:ボーナスidx|-1, m:小役idx|-1} ──
+function forbiddenBonusAlign(st,stops,cfg){for(let x=0;x<cfg.bonuses.length;x++){if(alignsBonus(stops,cfg,x)&&x!==st.b)return true;}return false;} // 対象外ボーナス整列は禁止
+function forbiddenSmallAlign(st,stops,cfg){
+  for(let g=0;g<cfg.smallRoles.length;g++){
+    // 通常時：BIG中のみの小役は不可視（並んでもハズレ目扱い＝禁止しない）。
+    // BIG中：モードを問わず判定＝「通常時のみ」の小役も整列すれば禁止目（見た目にも揃えない＝蹴飛ばす）。
+    if(!st.big&&!roleInMode(cfg.smallRoles[g],'normal'))continue;
+    for(const f of cfg.smallRoles[g].forms){
+      if(!smallFormAligns(f,stops,cfg))continue;
+      let ok=false; // この整列がこの状態で許容されるか
+      if(st.m===g){ if(!f.dupOnly)ok=true; else if(st.b>=0&&f.dupTargets.includes(st.b))ok=true; } // 通常形=成立小役なら可／重複専用形=対象ボーナス重複時のみ可
+      if(!ok)return true; // それ以外の整列（他小役・成立外の重複専用形 等）は禁止目
+    }
+  }
+  return false;
+}
+function forbiddenReach(st,stops,cfg){
+  if(st.big)return false; // BIG中はリーチ目/チャンス目を参照しない（出てもよい＝禁止しない。狙っても出さない）
+  for(const re of cfg.reachEyes){ if(!matchEye(re,stops,cfg))continue;
+    let ok=false;
+    if(st.b>=0){ if(re.targets.includes(st.b))ok=true; }   // ボーナス成立中：対象ボーナスのリーチ目のみ可（専用漏れ防止）
+    else if(st.m>=0){ if(re.chance)ok=true; }              // 小役単独：チャンス目可ONのみ可。ハズレリール(hasHaz)は一致条件であって許可条件ではない（chance=OFFのゲチェナ等＝純ボーナス前兆は小役状態でも禁止目）
+    // 純ハズレ（b<0&&m<0）は常に不可
+    if(!ok)return true;
+  }
+  return false;
+}
+// 取りこぼし目は禁止判定に関与しない：「対象小役単独で取りこぼした時に優先して出す」だけの優先tier（§5.2）であり、
+// 確定目（排他信号）ではない。他状態（ハズレ/他小役/ボーナス/重複/モード外）では不問＝出てもよい（狙っては出さない）。
+function acceptable(st,stops,cfg){return !(forbiddenBonusAlign(st,stops,cfg)||forbiddenSmallAlign(st,stops,cfg)||forbiddenReach(st,stops,cfg));}
+// pin＝そのセルが図柄を1つに固定して役を強制する。複数図柄OR（赤7/ワシ）は単一を強制しない＝pinしない（単一の正セルのみ）。
+function reachEyePinsRole(re,cfg,sym){return cfg.lines.some(L=>[0,1,2].every(j=>sym[j]==='*'||re.cells.some(c=>{if(c.neg||c.reel!==j||c.row!==L.rows[j])return false;const ss=cellSyms(c);return ss.length===1&&ss[0]===sym[j];})));}
+function reachEyePinsSmallWin(re,cfg){return cfg.smallRoles.some(r=>r.forms.some(f=>reachEyePinsRole(re,cfg,f.sym)));}
+function reachEyePinsBonus(re,cfg){return cfg.bonuses.some(b=>roleForms(b).some(sym=>reachEyePinsRole(re,cfg,sym)));}
+
+function buildFeas(state,order,cfg){
+  const [a,b,c]=order;const reels=cfg.reels;const nb=reels[b].length,nc=reels[c].length;
+  const mLast=new Map(),mMid=new Map();
+  function feasLast(sa,sb){const k=sa*10000+sb;if(mLast.has(k))return mLast.get(k);let ok=true;
+    for(let pc=0;pc<nc&&ok;pc++){let f=false;for(let s=0;s<=4;s++){const sc=(pc+s)%nc;const st=[];st[a]=sa;st[b]=sb;st[c]=sc;if(acceptable(state,st,cfg)){f=true;break;}}if(!f)ok=false;}
+    mLast.set(k,ok);return ok;}
+  function feasMid(sa){if(mMid.has(sa))return mMid.get(sa);let ok=true;
+    for(let pb=0;pb<nb&&ok;pb++){let f=false;for(let s=0;s<=4;s++){const sb=(pb+s)%nb;if(feasLast(sa,sb)){f=true;break;}}if(!f)ok=false;}
+    mMid.set(sa,ok);return ok;}
+  return {feasLast,feasMid};
+}
+// ── 状態列挙：ハズレ / 小役j / ボーナスk / ボーナスk＋小役j（重複）＋ BIG中モード（BIG中:ハズレ / BIG中:小役j） ──
+// 通常モード状態には通常モードの小役（normal/both）のみ。BIG中状態にはBIGモードの小役（big/both）のみ。
+// BIG中にボーナスは成立しない前提＝BIG中のボーナス/重複状態は作らない。BIGモードの小役が無ければBIG中状態自体を作らない。
+function enumStates(cfg){
+  const S=[{key:'ハズレ',b:-1,m:-1}];
+  cfg.smallRoles.forEach((r,j)=>{if(roleInMode(r,'normal'))S.push({key:'小役:'+r.name,b:-1,m:j});});
+  cfg.bonuses.forEach((bn,k)=>S.push({key:'ボーナス:'+bn.name,b:k,m:-1}));
+  cfg.bonuses.forEach((bn,k)=>cfg.smallRoles.forEach((r,j)=>{if(roleInMode(r,'normal'))S.push({key:'ボーナス:'+bn.name+'+小役:'+r.name,b:k,m:j});}));
+  if(cfg.smallRoles.some(r=>roleInMode(r,'big'))){
+    S.push({key:'BIG中:ハズレ',b:-1,m:-1,big:true});
+    cfg.smallRoles.forEach((r,j)=>{if(roleInMode(r,'big'))S.push({key:'BIG中:小役:'+r.name,b:-1,m:j,big:true});});
+  }
+  return S;
+}
+// 目標 t（{byReel}）と既に止めたリール stopped が整合するか
+function consistent(t,stops,stopped,reels){return stopped.every(j=>{const cs=t.byReel[j];return cs.length===0||cs.every(c=>cellSyms(c).includes(symAtRow(reels[j],stops[j],c.row)));});}
+// 揃い形(sym配列)群 → 各有効ライン上の引き込み目標
+function alignTargetsFromForms(forms,cfg){const T=[];forms.forEach(sym=>{cfg.linePriority.forEach(li=>{const L=cfg.lines[li];const byReel=[[],[],[]];[0,1,2].forEach(j=>{if(sym[j]!=='*')byReel[j].push({row:L.rows[j],sym:sym[j]});});T.push({byReel});});});return T;}
+// リーチ目群 → 目標（≠セル・ハズレリールも含む。tier判定は盤面が実際にその目を成すかで行う）
+// リーチ目/取りこぼし目を tier 目標へ。eye=true＝リーチ目/チャンス目（小役整列で打ち消される）。smallType＝小役揃い型（打ち消さない）。
+// ※取りこぼし目は呼び出し側で noAlignSmall を付与し、satisfiesTarget 側で eye の打ち消しを無効化する（取りこぼし目はリーチ目と別概念・§5.2）。
+function reachTargets(reList,cfg){return reList.map(re=>{const byReel=[[],[],[]];re.cells.forEach(c=>byReel[c.reel].push({row:c.row,syms:cellSyms(c).slice(),neg:!!c.neg}));return {byReel,hazReels:re.hazReels,eye:true,smallType:reachEyePinsSmallWin(re,cfg)};});}
+// 小役form jf と ボーナスform kf の「両立」目標（各ライン組合せの和。同リール同段で図柄衝突する組は除外）
+function combineFormTargets(jf,kf,cfg){const out=[];
+  cfg.linePriority.forEach(li=>{const Lj=cfg.lines[li];cfg.linePriority.forEach(lk=>{const Lk=cfg.lines[lk];const byReel=[[],[],[]];let ok=true;
+    [0,1,2].forEach(r=>{ if(jf[r]!=='*')byReel[r].push({row:Lj.rows[r],sym:jf[r]});
+      if(kf[r]!=='*'){const cell={row:Lk.rows[r],sym:kf[r]};if(byReel[r].some(c=>c.row===cell.row&&c.sym!==cell.sym))ok=false;byReel[r].push(cell);} });
+    if(ok)out.push({byReel});});});
+  return out;}
+// 状態 st の引き込み tier（上＝最優先）。各 tier = {name, targets:[{byReel}]}
+function stateTargets(st,cfg){
+  const {b,m}=st,tiers=[];
+  const sNormal=m>=0?cfg.smallRoles[m].forms.filter(f=>!f.dupOnly).map(f=>f.sym):[];
+  const sDup=(m>=0&&b>=0)?cfg.smallRoles[m].forms.filter(f=>f.dupOnly&&f.dupTargets.includes(b)).map(f=>f.sym):[];
+  const kForms=b>=0?roleForms(cfg.bonuses[b]):[];
+  const kReach=b>=0?cfg.reachEyes.filter(re=>re.targets.includes(b)):[];
+  const chance=cfg.reachEyes.filter(re=>re.chance); // チャンス目可ONのみ（小役ハズレ目もチャンス目として出すには chance=ON が必要）
+  if(b>=0&&m>=0){ // 重複：ボーナスは揃えない（引き込み制御なし）。禁止目以外で小役のみ引き込む＝重複専用形 → 小役通常形（ともにALIGN群）→ 取りこぼし目 → 通常目
+    const jD=alignTargetsFromForms(sDup,cfg);if(jD.length)tiers.push({name:'重複専用',targets:jD}); // 重複専用形（k対象のdupOnly）も小役の整列＝ALIGN群（通常形より上位tierで特殊信号を見せる）
+    const jA=alignTargetsFromForms(sNormal,cfg);if(jA.length)tiers.push({name:'小役',targets:jA}); // 小役揃い型リーチ目（小役が整列する目）はこの整列targetを満たす＝同じALIGN群＝優先順位1位。重複はsmallOnly降格なし（§6）
+    const miss=(cfg.missEyes||[]).filter(me=>me.target===m);
+    const mt=reachTargets(miss,cfg).map(t=>({...t,noAlignSmall:m,mode:'normal'})); // 取りこぼし目（対象小役が整列していない時のみ成立）
+    if(mt.length)tiers.push({name:'取りこぼし目',targets:mt});
+  }else if(b>=0){ // ボーナス単独：ボーナス → （リーチ目＝取りこぼし目：同順位）→ 通常目
+    const kA=alignTargetsFromForms(kForms,cfg);if(kA.length)tiers.push({name:'ボーナス',targets:kA});
+    const rt=reachTargets(kReach,cfg);
+    // ボーナス引き込み不可時、取りこぼし目もリーチ目と「同順位」で引き込む（どちらも合法スベリとして返す）。
+    // 全取りこぼし目を対象＝1つの「リーチ目」tierに合成（別tierにすると ValidSlips の MISS→REACH 順で片方しか返らないため・モードは通常固定）。
+    const allMiss=cfg.missEyes||[];
+    const missT=reachTargets(allMiss,cfg).map((t,i)=>({...t,noAlignSmall:allMiss[i].target,mode:'normal'})); // 対象小役が整列＝入賞でこの目に非該当（ボーナス単独では小役整列は禁止目なので実質常に成立）
+    const combined=[...rt,...missT];if(combined.length)tiers.push({name:'リーチ目',targets:combined});
+  }else if(m>=0){ // 小役単独（通常／BIG中とも）：小役 → 取りこぼし目 →（通常のみ）チャンス目
+    const jA=alignTargetsFromForms(sNormal,cfg);if(jA.length)tiers.push({name:'小役',targets:jA});
+    const miss=(cfg.missEyes||[]).filter(me=>me.target===m); // この小役が対象の取りこぼし目
+    const mt=reachTargets(miss,cfg).map(t=>({...t,noAlignSmall:m,mode:st.big?'big':'normal'})); // 取りこぼし目は「対象小役が整列していない」時のみ成立（入賞はミスではない）。ハズレリール判定は状態のモードで行う
+    if(mt.length)tiers.push({name:'取りこぼし目',targets:mt});
+    if(!st.big){const rt=reachTargets(chance,cfg);if(rt.length)tiers.push({name:'チャンス目',targets:rt});} // BIG中はリーチ目/チャンス目を狙わない（出てもよいが参照しない）
+  }
+  return tiers; // ハズレ（通常/BIG中）は tier なし（lose のみ）
+}
+// 盤面 stt が目標 t を成立させるか（≠セル＋ハズレリール対応）。align目標=役がライン整列／reach目標=その目を成す。
+function satisfiesTarget(t,stt,cfg){
+  if(![0,1,2].every(r=>t.byReel[r].every(x=>{const ss=cellSyms(x);const a=symAtRow(cfg.reels[r],stt[r],x.row);return x.neg?!ss.includes(a):ss.includes(a);})))return false;
+  if(t.hazReels)for(const reel of t.hazReels)if(!hazReelOK(reel,stt,cfg,t.mode))return false;
+  // リーチ目/チャンス目（eye かつ取りこぼし目でない）は、小役が揃う盤面では成立しない（小役揃い型 smallType を除く）。matchEye と同一規則・§5/§8。
+  if(t.eye&&t.noAlignSmall==null&&!t.smallType&&smallWinKicks(stt,cfg,t.mode||'normal'))return false;
+  if(t.noAlignSmall!=null&&smallRoleAligns(t.noAlignSmall,stt,cfg))return false; // 取りこぼし目：対象小役が整列していたらミスではない＝この目に該当しない
+  return true;
+}
+// 状態 st の制御マスク（押し順別・tier別ビットマスク）。停止 index は push 非依存。
+// 合法性・袋小路回避は先読み(feasMid/feasLast/acceptable)で担保。
+// tier分類は【回避可能性ベース】：「その停止から、禁止目を回避して役/目を成立させた合法盤面が"存在するか"」で決める。
+//  ・存在する → その役の引き込み(align) として扱い、停止する（＝後リールで禁止目を回避しつつ完成を狙う）。
+//  ・存在しない（=その停止からはどう止めても禁止目になる＝回避不能）→ lose（必要時のみ蹴飛ばす）。
+// ★ 左リールは安易に蹴らない：下段に赤7が来ても、後リールで揃え方を選べば禁止目を避けられる限り引き込みとして停止する。
+//   蹴る(lose化)のは「その停止から役を揃える形が必ず禁止目になる」回避不能ケースのみ（例：上段赤7→中段リプレイ揃い＝必ずリーチ目8）。
+function controlMasks(st,cfg){
+  const out={};
+  ORDERS.forEach(o=>{
+    const order=o.seq,a=order[0],b=order[1],c=order[2];
+    const feas=buildFeas(st,order,cfg),tiers=stateTargets(st,cfg),nt=tiers.length;
+    const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+    // 小役単独状態では、リーチ目(チャンス目)に一致する盤面は align(小役)より下位に分類する＝「清い小役入賞」を優先し
+    // 小役入賞が同時にリーチ目になる盤面（ガセ前兆）は、清い入賞が取れない時のみのフォールバックにする。
+    const smallOnly=(st.b<0&&st.m>=0);
+    const reachIdx=[],alignIdx=[];tiers.forEach((t,ti)=>{(ALIGN_TIERS.includes(t.name)?alignIdx:reachIdx).push(ti);}); // 非align(取りこぼし目/リーチ目/チャンス目)は align より先に判定＝清い小役入賞を優先
+    const tierOf=(stt)=>{
+      if(smallOnly){ for(const ti of reachIdx)for(const t of tiers[ti].targets)if(satisfiesTarget(t,stt,cfg))return ti;
+                     for(const ti of alignIdx)for(const t of tiers[ti].targets)if(satisfiesTarget(t,stt,cfg))return ti; return nt; }
+      for(let ti=0;ti<nt;ti++)for(const t of tiers[ti].targets)if(satisfiesTarget(t,stt,cfg))return ti;return nt;
+    }; // nt=lose
+    // 取りこぼし目tierは出力時に「取りこぼし目(確定)」と「取りこぼし目狙い」へ分割する（§5.2）：
+    //  確定＝その停止を採ると残りリールがどう止まっても（全acceptable継続が）取りこぼし目になる＝もう引き込めている。
+    //  狙い＝特定の止まり方なら取りこぼし目になる（後リールの押し位置次第＝出ないこともある）。
+    // ValidSlips は 確定があれば確定のみ → 無ければ狙い の順で返す（引き込み済みを優先）。
+    const missIdx=tiers.findIndex(t=>t.name==='取りこぼし目');
+    // 全停止組を1パス列挙：acceptableな盤面の tier を求め、prefix別の「達成可能な最良tier」と「全継続が取りこぼし目か(allM)」を集計
+    const NONE=nt+1;
+    const bestL=new Array(na).fill(NONE), bestLC=new Map(), full=new Int16Array(na*nb*nc).fill(-1); // full=-1:非acceptable
+    const allML=new Array(na).fill(true), allMLC=new Map();
+    for(let sa=0;sa<na;sa++)for(let sb=0;sb<nb;sb++){const key=sa*100+sb;let bc=bestLC.get(key);if(bc===undefined)bc=NONE;
+      let am=allMLC.get(key);if(am===undefined)am=true;
+      for(let sc=0;sc<nc;sc++){const stt=[];stt[a]=sa;stt[b]=sb;stt[c]=sc;if(!acceptable(st,stt,cfg))continue;const ti=tierOf(stt);
+        full[(sa*nb+sb)*nc+sc]=ti; if(ti<bestL[sa])bestL[sa]=ti; if(ti<bc)bc=ti;
+        if(ti!==missIdx){allML[sa]=false;am=false;}}
+      bestLC.set(key,bc);allMLC.set(key,am);}
+    const hasSplit=missIdx>=0;
+    const NT=nt+(hasSplit?1:0);
+    const tierNames=tiers.map(t=>t.name);if(hasSplit)tierNames.splice(missIdx+1,0,'取りこぼし目狙い');
+    const mapOut=(ti,allM)=>{if(ti>=nt)return NT; // lose
+      if(hasSplit){if(ti===missIdx)return allM?missIdx:missIdx+1;if(ti>missIdx)return ti+1;}
+      return ti;};
+    const blank=()=>({tiers:new Array(NT).fill(0),lose:0});
+    const put=(sit,bit,oi)=>{if(oi<NT)sit.tiers[oi]|=(1<<bit);else sit.lose|=(1<<bit);}; // oi===NT=lose
+    const s1=blank();
+    for(let sa=0;sa<na;sa++){if(!feas.feasMid(sa))continue;put(s1,sa,mapOut(bestL[sa]>nt?nt:bestL[sa],allML[sa]));}
+    const s2={};
+    for(let sa=0;sa<na;sa++){if(!feas.feasMid(sa))continue;const mm=blank();
+      for(let sb=0;sb<nb;sb++){if(!feas.feasLast(sa,sb))continue;const bc=bestLC.get(sa*100+sb);put(mm,sb,mapOut((bc===undefined||bc>nt)?nt:bc,allMLC.get(sa*100+sb)));}
+      s2[sa]=mm;}
+    const s3={};
+    for(let sa=0;sa<na;sa++){if(!feas.feasMid(sa))continue;for(let sb=0;sb<nb;sb++){if(!feas.feasLast(sa,sb))continue;const mm=blank();
+      for(let sc=0;sc<nc;sc++){const ti=full[(sa*nb+sb)*nc+sc];if(ti<0)continue;put(mm,sc,mapOut(ti,true));} // 完成盤面＝取りこぼし目なら常に確定
+      s3[sa*100+sb]=mm;}}
+    out[o.name]={seq:order,tierNames,s1,s2,s3};
+  });
+  return out;
+}
+const ALIGN_TIERS=['両立','重複専用','小役','ボーナス'],MISS_TIERS=['取りこぼし目','取りこぼし目狙い'],REACH_TIERS=['リーチ目','チャンス目'];
+function legalMaskOf(sit){let m=sit.lose;sit.tiers.forEach(t=>m|=t);return m;} // 合法停止＝全tier|lose
+// 状態の袋小路検出（0〜4 のどのスベリでも合法停止が無い押し位置）
+function deadEndsForState(st,M,cfg){
+  const errs=[];
+  ORDERS.forEach(o=>{const order=o.seq,a=order[0],b=order[1],c=order[2];const h=M[o.name];
+    const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+    const hit=(mask,p,n)=>{for(let k=0;k<=4;k++)if((mask>>((p+k)%n))&1)return true;return false;};
+    const L1=legalMaskOf(h.s1);
+    for(let pa=0;pa<na;pa++){if(!hit(L1,pa,na))errs.push(`[袋小路] ${st.key} / ${o.name} 第1停止 ${RLET[a]}押し${pa}`);}
+    for(let sa=0;sa<na;sa++){if(!((L1>>sa)&1))continue;const s2=h.s2[sa];if(!s2)continue;const L2=legalMaskOf(s2);
+      for(let pb=0;pb<nb;pb++){if(!hit(L2,pb,nb))errs.push(`[袋小路] ${st.key} / ${o.name} 第2停止 ${RLET[a]}=${sa},${RLET[b]}押し${pb}`);}}
+    for(let sa=0;sa<na;sa++){if(!((L1>>sa)&1))continue;const s2=h.s2[sa];if(!s2)continue;const L2=legalMaskOf(s2);
+      for(let sb=0;sb<nb;sb++){if(!((L2>>sb)&1))continue;const s3=h.s3[sa*100+sb];if(!s3)continue;const L3=legalMaskOf(s3);
+        for(let pc=0;pc<nc;pc++){if(!hit(L3,pc,nc))errs.push(`[袋小路] ${st.key} / ${o.name} 第3停止 ${RLET[a]}=${sa},${RLET[b]}=${sb},${RLET[c]}押し${pc}`);}}}
+  });
+  return errs;
+}
+// 状態の到達盤面集合（legal マスクの直積）＝リーチ目/重複専用形 検証用
+function boardsFromMasks(M,cfg){
+  const set=new Set();
+  ORDERS.forEach(o=>{const order=o.seq,a=order[0],b=order[1],c=order[2];const h=M[o.name];
+    const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+    const L1=legalMaskOf(h.s1);
+    for(let sa=0;sa<na;sa++){if(!((L1>>sa)&1))continue;const s2=h.s2[sa];if(!s2)continue;const L2=legalMaskOf(s2);
+      for(let sb=0;sb<nb;sb++){if(!((L2>>sb)&1))continue;const s3=h.s3[sa*100+sb];if(!s3)continue;const L3=legalMaskOf(s3);
+        for(let sc=0;sc<nc;sc++){if(!((L3>>sc)&1))continue;const stt=[];stt[a]=sa;stt[b]=sb;stt[c]=sc;set.add(stt[0]+'_'+stt[1]+'_'+stt[2]);}}}});
+  return set;
+}
+// ハズレ互換 validator（legal マスクを s1/s2/s3 の int で）
+function hazValidatorFromControl(M){
+  const v={};ORDERS.forEach(o=>{const h=M[o.name];const s2={},s3={};
+    Object.keys(h.s2).forEach(k=>s2[k]=legalMaskOf(h.s2[k]));
+    Object.keys(h.s3).forEach(k=>s3[k]=legalMaskOf(h.s3[k]));
+    v[o.name]={seq:h.seq,s1:legalMaskOf(h.s1),s2,s3};});
+  return v;
+}
+function keyToStops(k){return k.split('_').map(Number);}
+// リーチ目「テンパイ消滅」診断：各リーチ目が完成する停止（最後に拘束されるリール）まで、
+// 先行停止リールが連続して全て拘束される＝テンパイが一意に定まるとき、その完成リールが
+// 0〜4 のどのスベリでも禁止目（リーチ目union／小役／整列）を回避できない押し位置を検出する。
+// 該当すると、そのテンパイは（バリデータが到達を禁止するため）ハズレで成立不能＝リーチ目集合が過剰制約。
+// ※ 完成リールが第3停止に限らず第2停止でも検出（test2 のように複数リーチ目がC側を網羅する矛盾を捕捉）。
+// ※ 単独リーチ目では完成リールが自分の図柄を避けて逃げられるため誤検出しない。
+function reachEyeTrapScan(cfg){
+  const out=[],RL=['L','C','R'],feasCache={},HAZ={b:-1,m:-1};
+  function feasOf(o){return feasCache[o.name]||(feasCache[o.name]=buildFeas(HAZ,o.seq,cfg));}
+  function allowedStops(reel,re){const cs=re.cells.filter(x=>x.reel===reel);const n=cfg.reels[reel].length;const arr=[];for(let s=0;s<n;s++){if(cs.every(x=>{const ss=cellSyms(x);const a=symAtRow(cfg.reels[reel],s,x.row);return x.neg?!ss.includes(a):ss.includes(a);}))arr.push(s);}return arr;}
+  cfg.reachEyes.forEach(re=>{
+    const constr=new Set(re.cells.map(c=>c.reel));
+    ORDERS.forEach(o=>{
+      const seq=o.seq;
+      let m=-1;for(let k=0;k<3;k++)if(constr.has(seq[k]))m=k; // 完成停止index＝最後に拘束されるリールの停止番号
+      if(m<0)return;
+      for(let k=0;k<m;k++)if(!constr.has(seq[k]))return;       // 先行が連続して全拘束＝テンパイ一意の場合のみ対象
+      const feas=feasOf(o),mReel=seq[m],nm=cfg.reels[mReel].length;
+      // テンパイ prefix（先行停止リールの停止）を与え、完成リールが全押し位置で 0〜4 に逃げ場を持つか検査
+      function blockedPushes(pref){const bad=[];
+        for(let pm=0;pm<nm;pm++){let esc=false;
+          for(let s=0;s<=4;s++){const stop=((pm-s)%nm+nm)%nm;let ok;
+            if(m===0)ok=feas.feasMid(stop);                                  // 完成＝第1停止：先読み安全な停止が取れるか
+            else if(m===1)ok=feas.feasLast(pref[0],stop);                    // 完成＝第2停止：第3リールがまだ完成可能か
+            else{const st=[];st[seq[0]]=pref[0];st[seq[1]]=pref[1];st[mReel]=stop;ok=acceptable(HAZ,st,cfg);} // 完成＝第3停止
+            if(ok){esc=true;break;}}
+          if(!esc)bad.push(pm);}
+        return bad;}
+      const cand=seq.slice(0,m).map(r=>allowedStops(r,re));
+      // 先行停止だけで既に役が揃う（残りリール非依存＝例：左1リール役チェリー）テンパイは、
+      // そもそもハズレ盤面ではない（その役の入賞中）ので「逃げ場なし」誤検出を避けてスキップ。
+      const placed=seq.slice(0,m),free=seq.slice(m);
+      function prefixHasRoleWin(acc){const st=[];placed.forEach((r,k)=>st[r]=acc[k]);
+        const test=sym=>free.every(r=>sym[r]==='*')&&cfg.lines.some(L=>placed.every((r,k)=>sym[r]==='*'||symAtRow(cfg.reels[r],st[r],L.rows[r])===sym[r]));
+        return cfg.smallRoles.some(rr=>roleInMode(rr,'normal')&&rr.forms.some(f=>test(f.sym)))||cfg.bonuses.some(b=>roleForms(b).some(test));}
+      (function rec(i,acc){
+        if(i===m){if(prefixHasRoleWin(acc))return;blockedPushes(acc).forEach(pm=>out.push({re:re.name,uid:re.uid,cells:re.cells,order:o.name,seq:seq.slice(),stopNo:m+1,reelIdx:mReel,reel:RL[mReel],pref:acc.map((s,k)=>RL[seq[k]]+'='+s).join(','),prefStops:acc.slice(),push:pm}));return;}
+        for(const s of cand[i]){
+          // 到達不能テンパイの除外：第2停止が先読み上 非合法（=完成リールが完成不能なので制御が必ず避ける停止）
+          // の場合、そのテンパイ自体が実出目として成立しない。完成リールの逃げ場(SOFT)を論じる前に第2リールで蹴られるため除外。
+          if(i===1&&!feas.feasLast(acc[0],s))continue;
+          rec(i+1,acc.concat(s));
+        }
+      })(0,[]);
+    });
+  });
+  return out;
+}
+function generate(cfg){
+  const errors=[],warnings=[];
+  if(!cfg.bonuses.length)errors.push('ボーナスが1つも定義されていません');
+  // ★ 全状態の制御マスク（押し順別・tier別）と到達盤面・袋小路検査
+  const states=enumStates(cfg);
+  const control={},boards={};
+  states.forEach(st=>{ const M=controlMasks(st,cfg); control[st.key]=M; boards[st.key]=boardsFromMasks(M,cfg);
+    deadEndsForState(st,M,cfg).forEach(e=>errors.push(e)); });
+  const hazBoards=boards['ハズレ']||new Set();
+
+  // リーチ目検証（全状態の到達盤面で相互調査）
+  const reBoards=[];
+  const reReport=cfg.reachEyes.map(re=>{
+    const span=new Set(re.cells.map(c=>c.reel)).size;
+    const inst=reachEyeInstances(re,cfg); reBoards.push(inst); // 整列を除く全実出目（小役揃い型は小役入賞形も含む）
+    const byBonus=inst.length>0;
+    let inHazure=false,leak=false,inSmallMiss=false;
+    states.forEach(st=>{const set=boards[st.key];
+      if(st.big)return; // BIG中はリーチ目を参照しない（出てもよい＝検証対象外）
+      if(st.b<0&&st.m<0)set.forEach(k=>{if(matchEye(re,keyToStops(k),cfg))inHazure=true;});       // 純ハズレで出る＝ガセ目
+      if(st.b>=0&&!re.targets.includes(st.b))set.forEach(k=>{if(matchEye(re,keyToStops(k),cfg))leak=true;}); // 対象外ボーナス状態で出る＝専用漏れ
+      if(re.chance&&st.b<0&&st.m>=0)set.forEach(k=>{if(matchEye(re,keyToStops(k),cfg))inSmallMiss=true;});  // 小役単独で出せる＝チャンス目/小役ハズレ目 機能（chance=ONのみ対象）
+    });
+    const misWin=reachEyePinsSmallWin(re,cfg),misBonus=reachEyePinsBonus(re,cfg);
+    const kakutei=re.hasHaz?'小役ハズレ':span===1?'1確':span===2?'2確':'3確'; // 小役ハズレ（HAZリールあり）は確定段階ではなく「小役ハズレ」表記（チャンス目可の有無に依らない）
+    const bname=re.targets.length===0?'(対象なし)':(re.targets.length===cfg.bonuses.length?'共通':re.targets.map(k=>cfg.bonuses[k].name).join('・'));
+    const tag=`[${re.uid}] ${re.name}`;
+    if(inHazure)errors.push(`[衝突/ガセ目] リーチ目「${tag}」は純ハズレでも出現 → 禁止しきれない`);
+    if(!byBonus)errors.push(`[到達不能] リーチ目「${tag}」は成立しうる形が無い（整列と全て重複）`);
+    if(leak)errors.push(`[専用漏れ] リーチ目「${tag}」が対象外ボーナス状態でも出現`);
+    if(re.chance&&!inSmallMiss)warnings.push(`${re.hasHaz?'小役ハズレ目':'チャンス目'}「${tag}」は小役取りこぼしで出せない（${re.hasHaz?'小役ハズレ目':'チャンス目'}として機能しない可能性）`);
+    if(misBonus)warnings.push(`リーチ目「${tag}」はボーナス揃い形そのもの（リーチ目ではなく整列）`);
+    return {name:re.name,uid:re.uid,span,kakutei,byBonus,byHazure:inHazure,chance:!!re.chance,haz:!!re.hasHaz,inSmallMiss,misWin,bonus:bname};
+  });
+
+  // 取りこぼし目検証（到達不能でない／対象小役の取りこぼしで出せる）。
+  // 取りこぼし目は優先目であって確定目ではない＝他状態（ハズレ/他小役/ボーナス/重複）で出ても不問（byHazure/leak は情報表示のみ・エラーにしない）。
+  const missBoards=[];
+  const missReport=(cfg.missEyes||[]).map(me=>{
+    const span=new Set(me.cells.map(c=>c.reel)).size;
+    const meRole=cfg.smallRoles[me.target];
+    const meMode=(meRole&&roleMode(meRole)==='big')?'big':'normal'; // 'both' は通常側で代表（状態走査は両モードを見る）
+    const inst=reachEyeInstances(me,cfg,meMode); missBoards.push(inst); // 整列/小役を除く実出目（純粋な取りこぼし目のみ）
+    const byMiss=inst.length>0;
+    let inHazure=false,leak=false,inTargetMiss=false;
+    states.forEach(st=>{const set=boards[st.key];const mode=st.big?'big':'normal';
+      if(!meRole||!roleInMode(meRole,mode))return; // 対象小役のモード外状態では tier 参照されない（情報も対象モード内のみ集計）
+      const isTarget=(st.b<0&&st.m===me.target);
+      if(st.b<0&&st.m<0)set.forEach(k=>{if(matchMissEye(me,keyToStops(k),cfg,mode))inHazure=true;});            // 対象モードのハズレで出る（情報・不問）
+      else if(!isTarget)set.forEach(k=>{if(matchMissEye(me,keyToStops(k),cfg,mode))leak=true;});                 // 対象小役単独以外（他小役/ボーナス/重複）で出る（情報・不問）
+      if(isTarget)set.forEach(k=>{if(matchMissEye(me,keyToStops(k),cfg,mode))inTargetMiss=true;});               // 対象小役単独で出せる＝取りこぼし機能
+    });
+    const sname=cfg.smallRoles[me.target]?cfg.smallRoles[me.target].name:'?';
+    const tag=`[${me.uid}] ${me.name}`;
+    if(!byMiss)errors.push(`[到達不能] 取りこぼし目「${tag}」は成立しうる形が無い（整列/小役入賞と全て重複）`);
+    if(!inTargetMiss)warnings.push(`取りこぼし目「${tag}」は小役「${sname}」の取りこぼしで出せない（取りこぼし目として機能しない可能性）`);
+    return {name:me.name,uid:me.uid,span,small:sname,byMiss,byHazure:inHazure,leak,inTargetMiss};
+  });
+
+  // 重複専用形の漏れ：許可状態（対象重複）以外で出ていないか（対象小役のモード外状態は不可視＝検証対象外）
+  cfg.smallRoles.forEach((r,j)=>r.forms.forEach((f,fi)=>{ if(!f.dupOnly)return;
+    states.forEach(st=>{ if(!roleInMode(r,st.big?'big':'normal'))return;
+      const allowed=(st.m===j&&st.b>=0&&f.dupTargets.includes(st.b)); if(allowed)return;
+      let lk=false; boards[st.key].forEach(k=>{if(smallFormAligns(f,keyToStops(k),cfg))lk=true;});
+      if(lk)errors.push(`[重複専用漏れ] 小役「${r.name}」の重複専用形#${fi+1} が状態「${st.key}」で出現`);
+    });
+  }));
+  // BIG中のみの小役に重複専用形：重複状態はBIG中に存在しないため、その形はどの状態でも揃わない
+  cfg.smallRoles.forEach(r=>{if(roleMode(r)==='big'&&r.forms.some(f=>f.dupOnly))
+    warnings.push(`小役「${r.name}」は「BIG中のみ」ですが重複専用形があります（重複状態はBIG中に無いため、この形はどの状態でも揃いません）`);});
+
+  // 役の引き込み網羅：align tier を持つ状態が一度でも揃えられるか
+  const cov=[];
+  states.forEach(st=>{ if(st.b<0&&st.m<0)return; const M=control[st.key];
+    const hasAlignTier=ORDERS.some(o=>M[o.name].tierNames.some(nm=>ALIGN_TIERS.includes(nm)));
+    let alignable=false;
+    if(hasAlignTier)ORDERS.forEach(o=>{const h=M[o.name];const idxA=h.tierNames.map((nm,i)=>ALIGN_TIERS.includes(nm)?i:-1).filter(i=>i>=0);
+      const anyA=sit=>idxA.some(i=>sit.tiers[i]);
+      if(anyA(h.s1))alignable=true; Object.values(h.s2).forEach(sit=>{if(anyA(sit))alignable=true;}); Object.values(h.s3).forEach(sit=>{if(anyA(sit))alignable=true;});});
+    cov.push({key:st.key,hasAlignTier,alignable:hasAlignTier?alignable:true,boards:(boards[st.key]||new Set()).size});
+    if(hasAlignTier&&!alignable)warnings.push(`[引き込み不可] 状態「${st.key}」は全押し位置で一度も役を揃えられません`);
+  });
+
+  // テンパイ消滅（ハズレ）検出 → 完成段階で重大度を分ける
+  const traps=reachEyeTrapScan(cfg);
+  const trapHard=traps.filter(t=>t.stopNo<3),trapSoft=traps.filter(t=>t.stopNo===3);
+  if(trapHard.length){
+    const ex=trapHard.slice(0,8).map(t=>`「[${t.uid}] ${t.re}」${t.order}・第${t.stopNo}停止${t.reel}${t.pref?`(テンパイ ${t.pref})`:''}・押し${t.push}`);
+    errors.push(`[逃げ場なし/矛盾] 最終リールより前で完成するリーチ目テンパイが0〜4のどのスベリでも禁止目を回避できない押し位置 ${trapHard.length}件。該当テンパイはハズレで出せません（複数リーチ目が次リールを網羅＝過剰制約）。例: `+ex.join(' / '));
+  }
+  if(trapSoft.length){
+    const uniq=[...new Set(trapSoft.map(t=>`「[${t.uid}] ${t.re}」${t.order}(テンパイ ${t.pref})`))];
+    warnings.push(`[逃げ場なし/最終リール](警告) 最終リールで完成するテンパイが0〜4で禁止目（揃い含む）を回避できない押し位置 ${trapSoft.length}件。確定目の仕組み上は正常（上段に同図柄2つ→3つ目は揃いかリーチ目）。意図しない場合は具体的な滑り位置で再定義を。例: `+uniq.slice(0,6).join(' / '));
+  }
+
+  const ok=errors.length===0;
+  const validator=hazValidatorFromControl(control['ハズレ']); // ハズレ専用バリデータ（互換）
+  const boardCounts={};states.forEach(s=>boardCounts[s.key]=(boards[s.key]||new Set()).size);
+  const json={meta:{reels:{L:cfg.reels[0],C:cfg.reels[1],R:cfg.reels[2]},lines:cfg.lines.map(l=>l.name),positionRef:['上段','中段','下段'][REF],
+      bonuses:cfg.bonuses,smallRoles:cfg.smallRoles,reachEyes:cfg.reachEyes.map((r,i)=>({uid:r.uid,name:r.name,bonus:reReport[i].bonus,kakutei:reReport[i].kakutei,chance:!!r.chance,hazReels:r.hazReels,cells:r.cells})),
+      missEyes:(cfg.missEyes||[]).map(me=>({uid:me.uid,name:me.name,small:(cfg.smallRoles[me.target]?cfg.smallRoles[me.target].name:''),hazReels:me.hazReels,cells:me.cells}))},
+    control,validator,report:{ok,states:states.map(s=>s.key),definedReachEyes:reReport,definedMissEyes:missReport,coverage:cov,warnings,errors,boardCounts}};
+  return {ok,errors,warnings,reReport,reBoards,missReport,missBoards,coverage:cov,json,traps:{hard:trapHard.slice(0,8),soft:trapSoft.slice(0,8)},
+    stats:{states:states.length,haz:hazBoards.size,types:cfg.bonuses.length,smalls:cfg.smallRoles.length}};
+}
+function parseReel(s){return s.trim().split(/\s+/).filter(x=>x.length);}
+
+/* ===================== GUI 状態 ===================== */
+let symbols=[];        // {id,label,color}
+let symImages={};      // id -> dataURL
+let reels=[[],[],[]];
+let bonusesData=[];    // {name, sym:[id,id,id]}
+let smallRolesData=[]; // {name, sym:[id|*,...]}
+let reachEyesData=[];  // {name, grid:[row][reel]=id|null}
+let missEyesData=[];   // 取りこぼし目 {name, uid, small:対象小役名, grid:[row][reel]=id|null}
+let brush='R7';
+let negMode=false; // リーチ目セルに「以外(≠)」を置くモード
+let addMode=false; // ON時、塗りでセルに図柄を「追加」（複数図柄＝OR）。OFFは従来どおり上書き
+// グリッドセル描画：HAZ／単一図柄／複数図柄(OR)／否定集合に対応。複数は小チップを折返しで並べ、4個超は先頭3個＋「+N」。
+function cellChipRE(val,size){
+  if(val===HAZ){return `<span class="chip blank" style="width:${size}px;height:${size}px;color:#b388ff;font-size:${Math.round(size*0.38)}px;background:rgba(179,136,255,.14);border-color:#463a6b;">ハズレ</span>`;}
+  const pc=parseCell(val); if(!pc)return symChip(val,size); // 空（不問）
+  if(pc.syms.length===1&&!pc.neg)return symChip(pc.syms[0],size); // 単一＝従来の見た目
+  const negWrap=inner=>pc.neg?`<span style="position:relative;display:inline-flex;">${inner}<span style="position:absolute;inset:0;color:#ff5c6c;font-weight:bold;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:${Math.round(size*1.1)}px;">✗</span></span>`:inner;
+  if(pc.syms.length===1)return negWrap(symChip(pc.syms[0],size)); // 単一の否定（従来の ✗ 重ね）
+  const cs=Math.max(13,Math.round(size*0.62)); // 複数時の小チップサイズ
+  const shown=pc.syms.slice(0,3),extra=pc.syms.length-shown.length;
+  const title=escAttr((pc.neg?'以外: ':'')+pc.syms.map(id=>{const s=symById(id);return s?s.label:id;}).join(' / '));
+  const chips=shown.map(id=>symChip(id,cs)).join('')+(extra>0?`<span class="plabel" style="font-size:${Math.round(cs*0.6)}px;align-self:center;">+${extra}</span>`:'');
+  return negWrap(`<span title="${title}" style="display:inline-flex;flex-wrap:wrap;gap:1px;align-items:center;justify-content:center;max-width:${size}px;line-height:1;">${chips}</span>`);
+}
+let symSeq=0,reachSeq=0,bonusSeq=0,missSeq=0;
+let lastJson=null,lastReBoards=[],lastCfg=null;
+function el(id){return document.getElementById(id);}
+function symById(id){return symbols.find(s=>s.id===id);}
+function symIds(){return new Set(symbols.map(s=>s.id));}
+function newGrid(){return [0,1,2,3,4].map(()=>[null,null,null]);} // 5段×3リール（枠上/上/中/下/枠下）
+function escAttr(s){return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+
+function symChip(id,size){
+  size=size||26;const st=`width:${size}px;height:${size}px;`;
+  if(id===null||id===undefined||id==='')return `<span class="chip blank" style="${st}">不問</span>`;
+  if(id==='*')return `<span class="chip blank" style="${st}">任意</span>`;
+  if(symImages[id])return `<img class="chip" src="${symImages[id]}" style="${st}object-fit:cover;">`;
+  const s=symById(id);
+  if(!s)return `<span class="chip" style="${st}color:#ff5c6c;">?${id}</span>`;
+  return `<span class="chip" style="${st}color:${s.color};border-color:${s.color}66;background:${s.color}22;">${escAttr(s.label)}</span>`;
+}
+
+/* ---- ブラシ ---- */
+function renderPalette(){
+  el('palette').innerHTML='<span class="plabel">図柄ブラシ：</span>'+
+    symbols.map(s=>`<span class="pchip ${brush===s.id?'active':''}" onclick="setBrush('${s.id}')">${symChip(s.id,30)}</span>`).join('')+
+    `<span class="pchip ${brush==='__CLR__'?'active':''}" onclick="setBrush('__CLR__')"><span class="chip blank" style="width:46px;height:30px;">消す</span></span>`+
+    `<span class="pchip ${negMode?'active':''}" onclick="toggleNegMode()" title="ON時、リーチ目セルに『以外(≠)』を配置"><span class="chip blank" style="width:62px;height:30px;color:#ff8d99;">以外✗ ${negMode?'ON':'OFF'}</span></span>`+
+    `<span class="pchip ${addMode?'active':''}" onclick="toggleAddMode()" title="ON時、塗ると図柄をセルに『追加』（1セルに複数図柄＝OR。例 赤7/ワシ）。同じ図柄を再度塗ると外れる。OFFは従来どおり上書き。右クリックでセル全消去"><span class="chip blank" style="width:62px;height:30px;color:#7be08a;">追加＋ ${addMode?'ON':'OFF'}</span></span>`+
+    `<span class="pchip ${brush===HAZ?'active':''}" onclick="setBrush(HAZ)" title="リーチ目に置くと、そのリール(上中下段)が『ハズレ』＝そのリールで小役が揃っていない時のみ一致する条件になる。小役取りこぼし時に出す（小役ハズレ目）には『チャンス目可』もON（OFF＝ゲチェナ等の純ボーナス前兆）"><span class="chip blank" style="width:62px;height:30px;color:#b388ff;border-color:#b388ff66;background:rgba(179,136,255,.14);">小役ﾊｽﾞﾚ</span></span>`+
+    `<span style="margin-left:auto;display:inline-flex;gap:8px;align-items:center;">`+
+      `<button class="sec" onclick="saveProject()" title="プロジェクト保存：全設定＋図柄画像を含む編集用データを保存（バリデータJSONとは別物）" style="box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:.84rem;line-height:1.2;border-radius:8px;white-space:nowrap;">💾 保存</button>`+
+      `<label class="filebtn" title="プロジェクト読込：保存したプロジェクト(JSON)を読み込み" style="box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;font-size:.84rem;line-height:1.2;border-radius:8px;color:var(--ink);margin:0;white-space:nowrap;">📂 読込<input type="file" accept="application/json,.json" onchange="loadProject(this)"></label>`+
+    `</span>`;
+}
+function setBrush(id){brush=id;renderPalette();}
+function toggleNegMode(){negMode=!negMode;renderPalette();}
+function toggleAddMode(){addMode=!addMode;renderPalette();}
+function brushVal(){return brush==='__CLR__'?null:brush;}
+// 図柄塗りの新値を算出。追加モードONかつ既存が同極性なら集合へトグル追加/除去、それ以外は上書き（従来挙動）。
+function paintSym(prev,v){
+  const pol=negMode;
+  if(addMode){const cur=parseCell(prev);
+    if(cur&&cur.neg===pol){const has=cur.syms.includes(v);const syms=has?cur.syms.filter(x=>x!==v):[...cur.syms,v];return joinCell(pol,syms);}}
+  return (pol?'!':'')+v; // 上書き
+}
+function cellPaint(kind,a,b){const v=brushVal();
+  if(kind==='reel'){if(v===null||v==='*'||!symById(v))return;reels[a][b]=v;renderReels();}
+  else if(kind==='bonus'){bonusesData[a].sym[b]=(v===null)?'*':v;renderBonuses();}
+  else if(kind==='small'){smallRolesData[a].sym[b]=(v===null)?'*':v;renderSmall();}
+}
+function cellPaintRE(i,row,reel){const g=reachEyesData[i].grid;
+  if(brush===HAZ){[0,1,2,3,4].forEach(r=>g[r][reel]=null);[1,2,3].forEach(r=>g[r][reel]=HAZ);renderReach();return;} // 「ハズレ」はリール全体(上中下段)に適用＝列の図柄は消す
+  if([0,1,2,3,4].some(r=>g[r][reel]===HAZ))[0,1,2,3,4].forEach(r=>{if(g[r][reel]===HAZ)g[r][reel]=null;}); // 図柄/≠を置く列のハズレは解除
+  const v=brushVal();g[row][reel]=(v===null)?null:paintSym(g[row][reel],v);renderReach();}
+function cellClear(kind,a,b){
+  if(kind==='bonus'){bonusesData[a].sym[b]='*';renderBonuses();}
+  else if(kind==='small'){smallRolesData[a].sym[b]='*';renderSmall();}
+}
+function cellClearRE(i,row,reel){const g=reachEyesData[i].grid;if([0,1,2,3,4].some(r=>g[r][reel]===HAZ)){[0,1,2,3,4].forEach(r=>{if(g[r][reel]===HAZ)g[r][reel]=null;});}else g[row][reel]=null;renderReach();}
+
+/* ---- 図柄登録 ---- */
+function renderSymPanel(){
+  el('symPanel').innerHTML=symbols.map((s,i)=>`<div class="symrow">${symChip(s.id,30)}`+
+    `<input class="rolename" style="width:84px" value="${escAttr(s.label)}" oninput="symbols[${i}].label=this.value;refreshChips()">`+
+    `<input type="color" value="${s.color}" oninput="symbols[${i}].color=this.value;refreshChips()">`+
+    `<label class="filebtn">画像<input type="file" accept="image/*" onchange="loadSymImg('${s.id}',this)"></label>`+
+    (symImages[s.id]?`<button class="sec tiny" onclick="clearSymImg('${s.id}')">画像解除</button>`:'')+
+    `<button class="sec tiny" onclick="delSymbol(${i})">削除</button></div>`).join('');
+}
+function refreshChips(){renderPalette();renderReels();renderBonuses();renderSmall();renderReach();}
+function loadSymImg(id,inp){const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{symImages[id]=e.target.result;renderSymPanel();refreshChips();};r.readAsDataURL(f);}
+function clearSymImg(id){delete symImages[id];renderSymPanel();refreshChips();}
+function addSymbol(){const id='S'+(++symSeq);symbols.push({id,label:'新図柄',color:'#b388ff'});renderSymPanel();refreshChips();}
+function delSymbol(i){symbols.splice(i,1);renderSymPanel();refreshChips();}
+
+/* ---- リール ---- */
+function renderReels(){
+  ['reelL','reelC','reelR'].forEach((id,i)=>{const t=el(id);if(t)t.value=reels[i].join(' ');});
+  el('reelStrips').innerHTML=reels.map((rl,ri)=>`<div class="reelcol"><div class="rlabel">${RLET[ri]}（${rl.length}コマ）</div>`+
+    `<div class="strip">${rl.map((s,ci)=>`<div class="scell" onclick="cellPaint('reel',${ri},${ci})"><span class="si">${ci}</span>${symChip(s,26)}</div>`).join('')}</div></div>`).join('');
+  renderReelDock();
+}
+/* ---- リール参照ドック（右側固定・作業中も見比べ用） ---- */
+let dockOpen=(()=>{try{return localStorage.getItem('reelDockOpen')!=='0';}catch(_){return true;}})();
+function renderReelDock(){const d=el('reelDock');if(!d)return;
+  d.innerHTML=`<div style="font-size:.74rem;color:var(--accent);font-weight:bold;margin-bottom:2px;text-align:center;">リール配列（参照）</div>`+
+    `<div class="plabel" style="font-size:.62rem;text-align:center;margin-bottom:5px;">枠＝テスター押し位置から3コマ（上/中/下）</div>`+
+    `<div style="display:flex;gap:8px;justify-content:center;">`+
+    reels.map((rl,ri)=>{const n=rl.length;const p=(((tPush&&tPush[ri]||0)%n)+n)%n;
+      return `<div style="text-align:center;"><div class="rlabel" style="font-size:.72rem;margin-bottom:3px;">${RLET[ri]}</div>`+
+        rl.map((s,ci)=>{const w=((ci-p)%n+n)%n;const inW=w<3;const lbl=inW?['上','中','下'][w]:'';
+          return `<div style="display:flex;align-items:center;gap:3px;margin:1px 0;padding:1px 3px;border:1px solid ${inW?'var(--accent)':'transparent'};border-radius:5px;${inW?'background:rgba(255,176,46,.18);':''}"><span class="ri">${ci}</span>${symChip(s,24)}<span class="plabel" style="width:12px;font-size:.62rem;color:var(--accent);">${lbl}</span></div>`;}).join('')+
+        `</div>`;}).join('')+`</div>`;
+}
+function applyDock(){if(document.body&&document.body.classList)document.body.classList.toggle('dock-open',dockOpen);const tb=el('dockToggle');if(tb)tb.textContent=dockOpen?'◧ リール参照を隠す':'◧ リール参照';}
+function toggleDock(){dockOpen=!dockOpen;try{localStorage.setItem('reelDockOpen',dockOpen?'1':'0');}catch(_){}applyDock();}
+function applyReelText(){reels=[parseReel(el('reelL').value),parseReel(el('reelC').value),parseReel(el('reelR').value)];renderReels();}
+
+/* ---- ボーナス ---- */
+function renderBonuses(){
+  const cnt={};bonusesData.forEach(b=>cnt[b.name]=(cnt[b.name]||0)+1);
+  el('bonusPanel').innerHTML=bonusesData.map((b,i)=>`<div class="srow">`+
+    `<input class="rolename" value="${escAttr(b.name)}" onfocus="bonusNameOld=this.value" oninput="bonusesData[${i}].name=this.value" onchange="renBonus(${i},this.value)">`+
+    [0,1,2].map(j=>`<span class="cyc" onclick="cellPaint('bonus',${i},${j})" oncontextmenu="event.preventDefault();cellClear('bonus',${i},${j})">${symChip(b.sym[j],28)}</span>`).join('')+
+    (cnt[b.name]>1?`<span class="plabel" title="同名は同一フラグ＝いずれの揃い形でも成立扱い">同フラグ</span>`:'')+
+    `<button class="sec tiny" onclick="dupBonus(${i})" title="同名のまま複製＝別の揃い形を追加">複製</button>`+
+    `<button class="sec tiny" onclick="delBonus(${i})">削除</button></div>`).join('');
+}
+let bonusNameOld=''; // ボーナス名入力欄の編集開始時の名前（onfocusで記録）。確定時の参照付け替え用。
+// 入力中(oninput)は再描画せず名前だけ更新＝フォーカス維持。確定(onchange=blur/Enter)で参照を付け替えて再描画。
+function renBonus(i,v){const old=bonusNameOld;bonusesData[i].name=v;bonusNameOld=v;
+  // 同名(=同フラグ)の別行が残っているなら、その名前はまだ有効なので参照は付け替えない
+  if(old!==v&&!bonusesData.some((b,j)=>j!==i&&b.name===old)){
+    reachEyesData.forEach(re=>{if(re.bonuses)re.bonuses=re.bonuses.map(x=>x===old?v:x);});      // リーチ目の対象ボーナス参照
+    smallRolesData.forEach(r=>{if(r.dupBonuses)r.dupBonuses=r.dupBonuses.map(x=>x===old?v:x);}); // 重複専用形の対象ボーナス参照
+  }
+  renderBonuses();renderReach();renderSmall();}
+function addBonus(){bonusesData.push({name:'ボーナス'+(++bonusSeq),sym:['7','7','7']});renderBonuses();renderReach();renderSmall();}
+function dupBonus(i){const b=bonusesData[i];bonusesData.splice(i+1,0,{name:b.name,sym:b.sym.slice()});renderBonuses();renderReach();} // 同名のまま複製＝別の揃い形を追加
+function delBonus(i){const nm=bonusesData[i].name;bonusesData.splice(i,1);
+  // 同名の別行が残っていればフラグは存続→参照は維持。消滅したらリーチ目・重複専用形の対象参照からも除去（全て外れて0個＝全ボーナス対象に戻る）
+  if(!bonusesData.some(b=>b.name===nm)){
+    reachEyesData.forEach(re=>{if(re.bonuses)re.bonuses=re.bonuses.filter(x=>x!==nm);});
+    smallRolesData.forEach(r=>{if(r.dupBonuses)r.dupBonuses=r.dupBonuses.filter(x=>x!==nm);});
+  }
+  renderBonuses();renderReach();renderSmall();}
+
+/* ---- 小役 ---- */
+function renderSmall(){
+  const cnt={};smallRolesData.forEach(r=>cnt[r.name]=(cnt[r.name]||0)+1);
+  el('smallPanel').innerHTML=smallRolesData.map((r,i)=>{
+    const dup=!!r.dupOnly;let dupSel='';
+    if(dup){const seen=new Set();
+      dupSel='<span class="plabel" style="margin-left:6px;">重複対象:</span>'+bonusesData.map((b,bi)=>({b,bi})).filter(({b})=>{if(seen.has(b.name))return false;seen.add(b.name);return true;})
+        .map(({b,bi})=>`<label style="font-size:.74rem;margin-right:6px;white-space:nowrap;"><input type="checkbox" ${(r.dupBonuses||[]).includes(b.name)?'checked':''} onchange="toggleSmallDupBonus(${i},${bi},this.checked)"> ${escAttr(b.name)}</label>`).join('')+((r.dupBonuses||[]).length===0?'<span class="plabel">(無選択＝全ボーナス)</span>':'');
+    }
+    const mode=r.mode||'both';
+    const modeSel=`<select onchange="setSmallMode(${i},this.value)" title="この小役が成立し得るモード（既定＝通常＋BIG中）。「BIG中のみ」は通常時に不可視（並んでもただのハズレ目）。「通常時のみ」はBIG中では見た目にも揃えない（蹴飛ばす＝禁止目）" style="background:var(--code);color:${mode==='both'?'var(--ink)':'#ffce7a'};border:1px solid ${mode==='both'?'var(--border)':'#5a4423'};border-radius:6px;padding:3px 6px;font-family:inherit;font-size:.76rem;">`+
+      [['both','通常＋BIG中'],['normal','通常時のみ'],['big','BIG中のみ']].map(([v,l])=>`<option value="${v}" ${mode===v?'selected':''}>${l}</option>`).join('')+`</select>`;
+    return `<div class="srow">`+
+      `<input class="rolename" value="${escAttr(r.name)}" onfocus="smallNameOld=this.value" oninput="smallRolesData[${i}].name=this.value" onchange="renSmallName(${i},this.value)">`+
+      [0,1,2].map(j=>`<span class="cyc" onclick="cellPaint('small',${i},${j})" oncontextmenu="event.preventDefault();cellClear('small',${i},${j})">${symChip(r.sym[j],28)}</span>`).join('')+
+      (cnt[r.name]>1?`<span class="plabel" title="同名は同一フラグ＝いずれの揃い形でも成立扱い">同フラグ</span>`:'')+
+      modeSel+
+      `<button class="sec tiny" onclick="toggleSmallDup(${i})" title="ONで『重複時のみ揃う形』（リーチ目リプレイ等）。小役単独・ハズレでは出さない" style="${dup?'background:rgba(179,136,255,.25);color:#d6c7f5;border-color:#b388ff;':''}">重複専用 ${dup?'ON':'OFF'}</button>`+
+      dupSel+
+      `<button class="sec tiny" onclick="dupSmall(${i})" title="同名のまま複製＝別の揃い形を追加">複製</button>`+
+      `<button class="sec tiny" onclick="delSmall(${i})">削除</button></div>`;
+  }).join('');
+}
+function toggleSmallDup(i){const r=smallRolesData[i];r.dupOnly=!r.dupOnly;if(r.dupOnly&&!r.dupBonuses)r.dupBonuses=[];renderSmall();}
+// モードはフラグ（同名行）単位＝同名行をまとめて同期（同フラグの行ごとにモードが割れないように）
+function setSmallMode(i,v){const nm=smallRolesData[i].name;smallRolesData.forEach(r=>{if(r.name===nm)r.mode=v;});renderSmall();}
+function toggleSmallDupBonus(i,bi,on){const name=bonusesData[bi].name;let arr=smallRolesData[i].dupBonuses?smallRolesData[i].dupBonuses.slice():[];if(on){if(!arr.includes(name))arr.push(name);}else arr=arr.filter(x=>x!==name);smallRolesData[i].dupBonuses=arr;renderSmall();}
+function addSmall(){smallRolesData.push({name:'新役',sym:['*','*','*'],mode:'both',dupOnly:false,dupBonuses:[]});renderSmall();renderMiss();}
+function dupSmall(i){const r=smallRolesData[i];smallRolesData.splice(i+1,0,{name:r.name,sym:r.sym.slice(),mode:r.mode||'both',dupOnly:!!r.dupOnly,dupBonuses:(r.dupBonuses||[]).slice()});renderSmall();renderMiss();} // 同名のまま複製＝別の揃い形を追加
+let smallNameOld=''; // 小役名入力欄の編集開始時の名前（onfocusで記録）。取りこぼし目の対象参照の付け替え用。
+// 入力中(oninput)は再描画せず名前だけ更新＝フォーカス維持。確定(onchange)で取りこぼし目の対象小役参照を付け替えて再描画。
+function renSmallName(i,v){const old=smallNameOld;smallRolesData[i].name=v;smallNameOld=v;
+  if(old!==v&&!smallRolesData.some((r,j)=>j!==i&&r.name===old))missEyesData.forEach(me=>{if(me.small===old)me.small=v;});
+  renderSmall();renderMiss();}
+function delSmall(i){const nm=smallRolesData[i].name;smallRolesData.splice(i,1);
+  // 同名の別行が残っていればフラグは存続→取りこぼし目の対象参照は維持
+  if(!smallRolesData.some(r=>r.name===nm))missEyesData.forEach(me=>{if(me.small===nm)me.small='';});
+  renderSmall();renderMiss();}
+
+/* ---- リーチ目 ---- */
+function reelsConstrained(re){const s=new Set();[0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{const v=re.grid[row][reel];if(v&&v!==HAZ)s.add(reel);}));return [...s];}
+// 折りたたみ時の要約（制約セルを小チップで・対象/チャンス目/ハズレリール）
+function reachCompact(re){const out=[];const haz=[];
+  [0,1,2].forEach(reel=>{if([0,1,2,3,4].some(row=>re.grid[row][reel]===HAZ))haz.push(reel);});
+  [0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{const v=re.grid[row][reel];if(v&&v!==HAZ)out.push(`<span style="display:inline-flex;align-items:center;gap:2px;margin-right:5px;"><span class="plabel" style="font-size:.64rem;">${ROWLBL[row]}${RLET[reel]}</span>${cellChipRE(v,18)}</span>`);}));
+  haz.forEach(reel=>out.push(`<span class="plabel" style="font-size:.66rem;margin-right:5px;color:#b388ff;">${RLET[reel]}=ハズレ</span>`));
+  const tgt=(re.bonuses&&re.bonuses.length)?re.bonuses.join('・'):'共通';
+  return `<span class="plabel" style="margin-left:4px;">対象:${escAttr(tgt)}</span>`+(re.chance?'<span class="plabel" style="color:#7be08a;margin-left:5px;">チャンス目</span>':'')+`<span style="margin-left:8px;display:inline-flex;flex-wrap:wrap;align-items:center;">${out.join('')||'<span class="plabel">（未設定）</span>'}</span>`;
+}
+function renderReach(){
+  ensureReachUids();
+  const cnt=el('reachCount');if(cnt){const nd=reachEyesData.filter(r=>r.disabled).length;cnt.textContent=`（${reachEyesData.length}件${nd?`・無効${nd}件`:''}）`;}
+  const N=reachEyesData.length;
+  el('reachPanel').innerHTML=reachEyesData.map((re,i)=>{
+    const span=reelsConstrained(re).length;
+    const hasHaz=[0,1,2,3,4].some(row=>[0,1,2].some(reel=>re.grid[row][reel]===HAZ)); // グリッドに小役ハズレ(HAZ)があるか
+    const isMisEye=hasHaz; // 小役ハズレ（HAZリールあり）は確定段階ではなく「小役ハズレ」表記（チャンス目可の有無に依らない）
+    const kk=isMisEye?'小役ハズレ':span===0?'未設定':span===1?'1確':span===2?'2確':'3確';
+    const ktag=isMisEye?'khaz':('k'+(span||1));
+    const col=!!re.collapsed;const dis=!!re.disabled;
+    const wrapDim=h=>dis?`<span class="dimwrap" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;">${h}</span>`:h; // 無効時は内容を薄く（操作ボタンは除く）
+    const headL=`<span class="grip" draggable="true" ondragstart="reachDragStart(event,${i})" title="ドラッグで並べ替え">⠿</span>`+
+      `<button class="sec tiny" style="width:28px;padding:3px 0;" onclick="toggleReachCollapse(${i})" title="折りたたみ/展開">${col?'▸':'▾'}</button>`+
+      `<span class="plabel" style="min-width:30px;text-align:right;">#${i+1}</span>`+
+      `<span class="plabel" title="ユニークID（並べ替えても不変・文字表示と対応）" style="color:var(--accent2);font-family:Consolas,monospace;">[${re.uid}]</span>`+
+      `<input class="rolename" value="${escAttr(re.name)}" oninput="reachEyesData[${i}].name=this.value">`+
+      `<span class="tag ${ktag}">${kk}</span>`+
+      (dis?`<span class="tag dis">無効中</span>`:'');
+    const headR=`<span style="margin-left:auto;display:inline-flex;gap:4px;">`+
+      `<button class="sec tiny" style="${dis?'border-color:var(--green);color:var(--green);':''}" onclick="toggleReachDisabled(${i})" title="${dis?'有効に戻す（検証・生成の対象に含める）':'一時的に無効化（削除せず、検証・生成から除外。保存にも残る）'}">${dis?'有効に戻す':'無効化'}</button>`+
+      `<button class="sec tiny" onclick="dupReach(${i})" title="複製（名称・対象・チャンス目可・出目をコピーして直後に追加）">コピー</button>`+
+      `<button class="sec tiny" onclick="moveReach(${i},-1)" title="上へ" ${i===0?'disabled':''}>↑</button>`+
+      `<button class="sec tiny" onclick="moveReach(${i},1)" title="下へ" ${i===N-1?'disabled':''}>↓</button>`+
+      `<button class="sec tiny" onclick="delReach(${i})">削除</button></span>`;
+    if(col){
+      return `<div class="recard rcollapsed${dis?' redisabled':''}" ondragover="reachDragOver(event)" ondragleave="reachDragLeave(event)" ondrop="reachDrop(event,${i})"><div class="rehead">${headL}${wrapDim(reachCompact(re))}${headR}</div></div>`;
+    }
+    let g='<table class="regrid"><tr><th></th><th>左L</th><th>中C</th><th>右R</th></tr>';
+    [0,1,2,3,4].forEach(row=>{const frame=(row===0||row===4);g+=`<tr${frame?' style="opacity:.55"':''}><th>${ROWLBL[row]}</th>`+[0,1,2].map(reel=>`<td onclick="cellPaintRE(${i},${row},${reel})" oncontextmenu="event.preventDefault();cellClearRE(${i},${row},${reel})">${cellChipRE(re.grid[row][reel],26)}</td>`).join('')+'</tr>';});
+    g+='</table>';
+    const sel=re.bonuses||[];
+    const seenB=new Set();
+    const bsel=bonusesData.map((b,bi)=>({b,bi})).filter(({b})=>{if(seenB.has(b.name))return false;seenB.add(b.name);return true;})
+      .map(({b,bi})=>`<label style="font-size:.76rem;margin-right:7px;white-space:nowrap;"><input type="checkbox" ${sel.includes(b.name)?'checked':''} onchange="toggleReachBonus(${i},${bi},this.checked)"> ${escAttr(b.name)}</label>`).join('')+(sel.length===0?`<span class="plabel">(無選択＝共通)</span>`:'');
+    const chanceChk=`<label style="font-size:.76rem;margin-left:8px;white-space:nowrap;" title="ONで小役取りこぼし時のチャンス目に使用（純ハズレでは出さない）。OFF＝1確等の純ボーナス前兆"><input type="checkbox" ${re.chance?'checked':''} onchange="toggleReachChance(${i},this.checked)"> チャンス目可</label>`;
+    return `<div class="recard${dis?' redisabled':''}" ondragover="reachDragOver(event)" ondragleave="reachDragLeave(event)" ondrop="reachDrop(event,${i})"><div class="rehead">${headL}${wrapDim(`<span class="plabel">対象:</span>${bsel}${chanceChk}`)}${headR}</div>${g}</div>`;
+  }).join('')||'<small>リーチ目がありません。「＋ リーチ目を追加」で作成してください。</small>';
+}
+function toggleReachBonus(i,bi,on){const name=bonusesData[bi].name;let arr=reachEyesData[i].bonuses?reachEyesData[i].bonuses.slice():[];if(on){if(!arr.includes(name))arr.push(name);}else arr=arr.filter(x=>x!==name);reachEyesData[i].bonuses=arr;renderReach();}
+function toggleReachChance(i,on){reachEyesData[i].chance=on;renderReach();}
+function toggleReachDisabled(i){reachEyesData[i].disabled=!reachEyesData[i].disabled;renderReach();} // 一時無効（検証・生成から除外。削除はしない）
+function toggleReachCollapse(i){reachEyesData[i].collapsed=!reachEyesData[i].collapsed;renderReach();}
+function reachCollapseAll(v){reachEyesData.forEach(re=>re.collapsed=v);renderReach();}
+function moveReach(i,d){const j=i+d;if(j<0||j>=reachEyesData.length)return;const t=reachEyesData[i];reachEyesData[i]=reachEyesData[j];reachEyesData[j]=t;renderReach();}
+let dragReachIdx=-1;
+function reachDragStart(e,i){dragReachIdx=i;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',''+i);}catch(_){}}
+function reachDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';const c=e.currentTarget;if(c&&c.classList)c.classList.add('dragover');}
+function reachDragLeave(e){const c=e.currentTarget;if(c&&c.classList)c.classList.remove('dragover');}
+function reachDrop(e,i){e.preventDefault();const c=e.currentTarget;if(c&&c.classList)c.classList.remove('dragover');const from=dragReachIdx;dragReachIdx=-1;if(from<0||from===i)return;const item=reachEyesData.splice(from,1)[0];reachEyesData.splice(from<i?i-1:i,0,item);renderReach();}
+function genReachUid(){const used=new Set(reachEyesData.map(r=>r.uid).filter(Boolean));let id;do{id=Math.random().toString(36).slice(2,7);}while(used.has(id)||id.length<5);return id;} // 5桁 base36 のユニークID（ハッシュ風）
+function ensureReachUids(){reachEyesData.forEach(re=>{if(!re.uid)re.uid=genReachUid();});}
+function addReach(){reachEyesData.push({name:'リーチ目'+(++reachSeq),uid:genReachUid(),bonuses:[],chance:false,disabled:false,grid:newGrid()});renderReach();scrollToLastCard('reachPanel');}
+// 追加直後に末尾カード（＝新規追加分）までスクロール（パネル内部スクロール＋ページの両方を scrollIntoView が処理）
+function scrollToLastCard(panelId){const p=el(panelId);if(!p)return;const cards=p.querySelectorAll('.recard');if(cards.length)scrollToCard(panelId,cards.length-1);}
+function scrollToCard(panelId,idx){const p=el(panelId);if(!p)return;const cards=p.querySelectorAll('.recard');if(cards[idx])cards[idx].scrollIntoView({behavior:'smooth',block:'nearest'});} // コピー（途中挿入）用：index指定でスクロール
+function delReach(i){reachEyesData.splice(i,1);renderReach();}
+function dupReach(i){const re=reachEyesData[i];reachEyesData.splice(i+1,0,{name:re.name,uid:genReachUid(),bonuses:(re.bonuses||[]).slice(),chance:!!re.chance,disabled:!!re.disabled,collapsed:!!re.collapsed,grid:re.grid.map(r=>r.slice())});renderReach();scrollToCard('reachPanel',i+1);} // 名称・対象・チャンス目可・出目をコピーして直後に追加（uidは新規）
+
+/* ---- 取りこぼし目（小役ミス時の優先目。グリッドはリーチ目と同形・対象は単一小役） ---- */
+function reelsConstrainedMiss(me){const s=new Set();[0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{const v=me.grid[row][reel];if(v&&v!==HAZ)s.add(reel);}));return [...s];}
+function missCompact(me){const out=[];const haz=[];
+  [0,1,2].forEach(reel=>{if([0,1,2,3,4].some(row=>me.grid[row][reel]===HAZ))haz.push(reel);});
+  [0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{const v=me.grid[row][reel];if(v&&v!==HAZ)out.push(`<span style="display:inline-flex;align-items:center;gap:2px;margin-right:5px;"><span class="plabel" style="font-size:.64rem;">${ROWLBL[row]}${RLET[reel]}</span>${cellChipRE(v,18)}</span>`);}));
+  haz.forEach(reel=>out.push(`<span class="plabel" style="font-size:.66rem;margin-right:5px;color:#b388ff;">${RLET[reel]}=ハズレ</span>`));
+  const tgt=me.small?me.small:'(未選択)';
+  return `<span class="plabel" style="margin-left:4px;">対象小役:${escAttr(tgt)}</span><span style="margin-left:8px;display:inline-flex;flex-wrap:wrap;align-items:center;">${out.join('')||'<span class="plabel">（未設定）</span>'}</span>`;
+}
+function renderMiss(){
+  ensureMissUids();
+  const cnt=el('missCount');if(cnt){const nd=missEyesData.filter(r=>r.disabled).length;cnt.textContent=`（${missEyesData.length}件${nd?`・無効${nd}件`:''}）`;}
+  const N=missEyesData.length;
+  const seenS=new Set();const smallOpts=smallRolesData.filter(r=>{if(seenS.has(r.name))return false;seenS.add(r.name);return true;}); // 対象小役候補（同名は1つ）
+  el('missPanel').innerHTML=missEyesData.map((me,i)=>{
+    const span=reelsConstrainedMiss(me).length;const kk=span===0?'未設定':span===1?'1リール':span===2?'2リール':'3リール';
+    const col=!!me.collapsed;const dis=!!me.disabled;
+    const wrapDim=h=>dis?`<span class="dimwrap" style="display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;">${h}</span>`:h; // 無効時は内容を薄く（操作ボタンは除く）
+    const headL=`<span class="grip" draggable="true" ondragstart="missDragStart(event,${i})" title="ドラッグで並べ替え">⠿</span>`+
+      `<button class="sec tiny" style="width:28px;padding:3px 0;" onclick="toggleMissCollapse(${i})" title="折りたたみ/展開">${col?'▸':'▾'}</button>`+
+      `<span class="plabel" style="min-width:30px;text-align:right;">#${i+1}</span>`+
+      `<span class="plabel" title="ユニークID（並べ替えても不変）" style="color:var(--accent2);font-family:Consolas,monospace;">[${me.uid}]</span>`+
+      `<input class="rolename" value="${escAttr(me.name)}" oninput="missEyesData[${i}].name=this.value">`+
+      `<span class="tag k${span||1}">${kk}</span>`+
+      (dis?`<span class="tag dis">無効中</span>`:'');
+    const headR=`<span style="margin-left:auto;display:inline-flex;gap:4px;">`+
+      `<button class="sec tiny" style="${dis?'border-color:var(--green);color:var(--green);':''}" onclick="toggleMissDisabled(${i})" title="${dis?'有効に戻す（検証・生成の対象に含める）':'一時的に無効化（削除せず、検証・生成から除外。保存にも残る）'}">${dis?'有効に戻す':'無効化'}</button>`+
+      `<button class="sec tiny" onclick="dupMiss(${i})" title="複製（名称・対象小役・出目をコピーして直後に追加）">コピー</button>`+
+      `<button class="sec tiny" onclick="moveMiss(${i},-1)" title="上へ" ${i===0?'disabled':''}>↑</button>`+
+      `<button class="sec tiny" onclick="moveMiss(${i},1)" title="下へ" ${i===N-1?'disabled':''}>↓</button>`+
+      `<button class="sec tiny" onclick="delMiss(${i})">削除</button></span>`;
+    if(col){
+      return `<div class="recard rcollapsed${dis?' redisabled':''}" ondragover="missDragOver(event)" ondragleave="missDragLeave(event)" ondrop="missDrop(event,${i})"><div class="rehead">${headL}${wrapDim(missCompact(me))}${headR}</div></div>`;
+    }
+    let g='<table class="regrid"><tr><th></th><th>左L</th><th>中C</th><th>右R</th></tr>';
+    [0,1,2,3,4].forEach(row=>{const frame=(row===0||row===4);g+=`<tr${frame?' style="opacity:.55"':''}><th>${ROWLBL[row]}</th>`+[0,1,2].map(reel=>`<td onclick="cellPaintMiss(${i},${row},${reel})" oncontextmenu="event.preventDefault();cellClearMiss(${i},${row},${reel})">${cellChipRE(me.grid[row][reel],26)}</td>`).join('')+'</tr>';});
+    g+='</table>';
+    const ssel=`<select onchange="setMissSmall(${i},this.value)" style="background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-family:inherit;font-size:.78rem;"><option value="" ${me.small?'':'selected'}>（小役を選択）</option>`+
+      smallOpts.map(r=>`<option value="${escAttr(r.name)}" ${me.small===r.name?'selected':''}>${escAttr(r.name)}</option>`).join('')+`</select>`;
+    return `<div class="recard${dis?' redisabled':''}" ondragover="missDragOver(event)" ondragleave="missDragLeave(event)" ondrop="missDrop(event,${i})"><div class="rehead">${headL}${wrapDim(`<span class="plabel">対象小役:</span>${ssel}`)}${headR}</div>${g}</div>`;
+  }).join('')||'<small>取りこぼし目がありません。「＋ 取りこぼし目を追加」で作成してください。</small>';
+}
+function setMissSmall(i,v){missEyesData[i].small=v;renderMiss();}
+function toggleMissDisabled(i){missEyesData[i].disabled=!missEyesData[i].disabled;renderMiss();} // 一時無効（検証・生成から除外。削除はしない）
+function toggleMissCollapse(i){missEyesData[i].collapsed=!missEyesData[i].collapsed;renderMiss();}
+function missCollapseAll(v){missEyesData.forEach(me=>me.collapsed=v);renderMiss();}
+function moveMiss(i,d){const j=i+d;if(j<0||j>=missEyesData.length)return;const t=missEyesData[i];missEyesData[i]=missEyesData[j];missEyesData[j]=t;renderMiss();}
+let dragMissIdx=-1;
+function missDragStart(e,i){dragMissIdx=i;e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',''+i);}catch(_){}}
+function missDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';const c=e.currentTarget;if(c&&c.classList)c.classList.add('dragover');}
+function missDragLeave(e){const c=e.currentTarget;if(c&&c.classList)c.classList.remove('dragover');}
+function missDrop(e,i){e.preventDefault();const c=e.currentTarget;if(c&&c.classList)c.classList.remove('dragover');const from=dragMissIdx;dragMissIdx=-1;if(from<0||from===i)return;const item=missEyesData.splice(from,1)[0];missEyesData.splice(from<i?i-1:i,0,item);renderMiss();}
+function genMissUid(){const used=new Set(missEyesData.map(r=>r.uid).filter(Boolean));let id;do{id=Math.random().toString(36).slice(2,7);}while(used.has(id)||id.length<5);return id;}
+function ensureMissUids(){missEyesData.forEach(me=>{if(!me.uid)me.uid=genMissUid();});}
+function addMiss(){missEyesData.push({name:'取りこぼし目'+(++missSeq),uid:genMissUid(),small:'',collapsed:false,disabled:false,grid:newGrid()});renderMiss();scrollToLastCard('missPanel');}
+function delMiss(i){missEyesData.splice(i,1);renderMiss();}
+function dupMiss(i){const me=missEyesData[i];missEyesData.splice(i+1,0,{name:me.name,uid:genMissUid(),small:me.small||'',disabled:!!me.disabled,collapsed:!!me.collapsed,grid:me.grid.map(r=>r.slice())});renderMiss();scrollToCard('missPanel',i+1);} // 名称・対象小役・出目をコピーして直後に追加（uidは新規）
+function cellPaintMiss(i,row,reel){const g=missEyesData[i].grid;
+  if(brush===HAZ){[0,1,2,3,4].forEach(r=>g[r][reel]=null);[1,2,3].forEach(r=>g[r][reel]=HAZ);renderMiss();return;}
+  if([0,1,2,3,4].some(r=>g[r][reel]===HAZ))[0,1,2,3,4].forEach(r=>{if(g[r][reel]===HAZ)g[r][reel]=null;});
+  const v=brushVal();g[row][reel]=(v===null)?null:paintSym(g[row][reel],v);renderMiss();}
+function cellClearMiss(i,row,reel){const g=missEyesData[i].grid;if([0,1,2,3,4].some(r=>g[r][reel]===HAZ)){[0,1,2,3,4].forEach(r=>{if(g[r][reel]===HAZ)g[r][reel]=null;});}else g[row][reel]=null;renderMiss();}
+
+function renderAll(){renderPalette();renderSymPanel();renderReels();renderBonuses();renderSmall();renderMiss();renderReach();}
+
+/* ===================== config・検証・出力 ===================== */
+// 同名の行を1つのフラグへ集約。各フラグは複数の揃い形(forms)を持ち、どれが揃っても成立扱い。（ボーナス用：forms=sym配列）
+function groupRolesByName(list){const order=[],map=new Map();
+  list.forEach(r=>{if(!map.has(r.name)){map.set(r.name,{name:r.name,forms:[]});order.push(r.name);}map.get(r.name).forms.push(r.sym.slice());});
+  return order.map(n=>map.get(n));}
+// 小役：同名集約＋各フォームに scope（dupOnly＝重複専用／dupTargets＝対象ボーナスidx）を保持。
+// フラグのモード（normal/big/both）は先頭行から（GUIは同名行を同期）。
+function groupSmallRoles(list,bonuses){const order=[],map=new Map();
+  list.forEach(r=>{if(!map.has(r.name)){map.set(r.name,{name:r.name,mode:r.mode||'both',forms:[]});order.push(r.name);}
+    const dupTargets=(r.dupOnly&&r.dupBonuses&&r.dupBonuses.length)
+      ?[...new Set(r.dupBonuses.map(n=>bonuses.findIndex(b=>b.name===n)).filter(i=>i>=0))]
+      :(r.dupOnly?bonuses.map((b,i)=>i):[]); // 重複専用で対象未指定＝全ボーナス対象
+    map.get(r.name).forms.push({sym:r.sym.slice(),dupOnly:!!r.dupOnly,dupTargets});});
+  return order.map(n=>map.get(n));}
+function readConfig(){
+  const linePriority=[1,0,2,3,4]; // 既定（中→上→下→右上→右下）。引き込み目標の探索順
+  const sp=[0,1,2,3,4];           // 既定スベリ優先。同tier内のタイブレーク
+  const bonuses=groupRolesByName(bonusesData);   // 同名ボーナスは1フラグ（揃い形違いを許容）
+  const smallRoles=groupSmallRoles(smallRolesData,bonuses);
+  const reachEyes=reachEyesData.filter(re=>!re.disabled).map((re,ri)=>{const cells=[];const hazReels=[]; // 無効中のリーチ目は検証・生成から除外
+    [0,1,2].forEach(reel=>{if([0,1,2,3,4].some(row=>re.grid[row][reel]===HAZ))hazReels.push(reel);}); // 「ハズレ」リール（上中下段いずれかにHAZ）
+    [0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{if(hazReels.includes(reel))return;const pc=parseCell(re.grid[row][reel]);if(pc)cells.push({reel,row:row-1,syms:pc.syms,neg:pc.neg});})); // ハズレリールの図柄セルは無視。複数図柄(OR)対応
+    const names=(re.bonuses&&re.bonuses.length)?re.bonuses:null; // null＝共通(全ボーナス)
+    const targets=names?[...new Set(names.map(n=>bonuses.findIndex(b=>b.name===n)).filter(i=>i>=0))]:bonuses.map((b,i)=>i); // ボーナス「グループ」index へ写像
+    return {name:re.name,uid:re.uid||('p'+(ri+1)),cells,targets,chance:!!re.chance,hazReels,hasHaz:hazReels.length>0};}).filter(re=>re.cells.length>0||re.hasHaz);
+  // 取りこぼし目：リーチ目と同じグリッド解釈。対象は単一小役（target=小役グループindex）。小役未選択は除外。
+  const missEyes=missEyesData.filter(me=>!me.disabled).map((me,mi)=>{const cells=[];const hazReels=[]; // 無効中の取りこぼし目は検証・生成から除外
+    [0,1,2].forEach(reel=>{if([0,1,2,3,4].some(row=>me.grid[row][reel]===HAZ))hazReels.push(reel);});
+    [0,1,2,3,4].forEach(row=>[0,1,2].forEach(reel=>{if(hazReels.includes(reel))return;const pc=parseCell(me.grid[row][reel]);if(pc)cells.push({reel,row:row-1,syms:pc.syms,neg:pc.neg});})); // 複数図柄(OR)対応
+    const target=me.small?smallRoles.findIndex(r=>r.name===me.small):-1; // 対象小役グループindex
+    return {name:me.name,uid:me.uid||('m'+(mi+1)),cells,target,hazReels,hasHaz:hazReels.length>0};}).filter(me=>(me.cells.length>0||me.hasHaz)&&me.target>=0);
+  return {reels:reels.map(r=>r.slice()),lines:LINES,bonuses,smallRoles,reachEyes,missEyes,slipPriority:sp,linePriority};
+}
+function validateConfig(cfg){const errs=[];const ids=symIds();
+  ['L','C','R'].forEach((n,i)=>{if(cfg.reels[i].length<5)errs.push(`${n}リールのコマ数が少なすぎます`);cfg.reels[i].forEach(s=>{if(!ids.has(s))errs.push(`${n}リールに未登録の図柄: ${s}`);});});
+  if(!cfg.bonuses.length)errs.push('ボーナスを1つ以上定義してください');
+  cfg.bonuses.forEach(b=>roleForms(b).forEach(sym=>sym.forEach(s=>{if(s!=='*'&&!ids.has(s))errs.push(`ボーナス「${b.name}」に未登録の図柄: ${s}`);})));
+  cfg.smallRoles.forEach(r=>r.forms.forEach(f=>f.sym.forEach(s=>{if(s!=='*'&&!ids.has(s))errs.push(`小役「${r.name}」に未登録の図柄: ${s}`);})));
+  if(cfg.reachEyes.length===0)errs.push('図柄を1つ以上置いたリーチ目が必要です');
+  return [...new Set(errs)];}
+
+function run(){ // オーバーレイを表示→2重rAFで1フレーム描画を保証してから重い同期処理（runCore）を開始
+  const ov=el('busyOverlay');ov.classList.add('on');el('btnGen').disabled=true;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{try{runCore();}finally{ov.classList.remove('on');el('btnGen').disabled=false;}}));
+}
+function runCore(){
+  REF=+el('refRow').value;
+  const cfg=readConfig();const ve=validateConfig(cfg);const R=el('result');
+  if(ve.length){R.innerHTML=`<div class="msg err"><b>入力エラー</b><br>${ve.join('<br>')}</div>`;el('btnDl').disabled=true;return;}
+  const t0=performance.now();const res=generate(cfg);const ms=Math.round(performance.now()-t0);
+  lastJson=res.ok?res.json:null;el('btnDl').disabled=!res.ok;el('btnCs').disabled=!res.ok;lastReBoards=res.reBoards||[];lastCfg=cfg;
+  let h='';
+  if(res.ok)h+=`<div class="msg ok"><b>✔ 検証成功</b>（全 ${res.stats.states} 状態で袋小路なし・ボーナス${res.stats.types}種・小役${res.stats.smalls}種・${ms}ms）。制御JSON / C# をダウンロードできます。</div>`;
+  else h+=`<div class="msg err"><b>✘ エラー ${res.errors.length}件（JSON未出力）</b><br>${res.errors.slice(0,40).map(escapeHtml).join('<br>')}</div>`;
+  if(res.warnings.length)h+=`<div class="msg warn"><b>⚠ 警告 ${res.warnings.length}件</b><br>${res.warnings.slice(0,20).map(escapeHtml).join('<br>')}</div>`;
+  const allTraps=res.traps?[...res.traps.hard,...res.traps.soft]:[];
+  if(allTraps.length)h+=`<div class="card full"><h2>逃げ場なし箇所の出目プレビュー（先頭${allTraps.length}件）</h2><small>各例のテンパイで、示した押し位置から 0〜4コマすべてが禁止目（リーチ目／小役／整列）になり、完成リールに逃げ場がない様子。条件セルは枠で強調。</small>${allTraps.map(trapPreview).join('')}</div>`;
+  h+=`<div class="stat"><div>状態数 <b>${res.stats.states}</b></div><div>ボーナス <b>${res.stats.types}</b></div><div>小役 <b>${res.stats.smalls}</b></div><div>ハズレ可能出目 <b>${res.stats.haz}</b></div></div>`;
+  // 実出目プレビュー（枠内スクロール）
+  let pv='';
+  res.reReport.forEach((r,i)=>{const cnt=(res.reBoards[i]||[]).length;pv+=`<details class="prevd" ontoggle="if(this.open)fillPreview(${i})"><summary><span style="color:var(--accent2);font-family:Consolas,monospace;">[${escapeHtml(r.uid)}]</span> ${escapeHtml(r.name)}（対象:${escapeHtml(r.bonus)}・${r.kakutei}${r.chance?'・チャンス目':''}・実出目 ${cnt}例）</summary><div id="prev_${i}" class="mbwrap"><small>クリックで展開</small></div></details>`;});
+  h+=`<div class="card full"><h2>実出目プレビュー（${res.reReport.length}リーチ目・クリックで展開）</h2><small>条件セルは枠で強調／不問マスは実リール図柄で自動充填。1確は「全件表示」で全パターン展開できます。</small><div style="max-height:620px;overflow-y:auto;padding-right:4px;margin-top:6px;">${pv}</div></div>`;
+  // 状態別 制御の検証（引き込み/取りこぼし網羅）
+  h+=`<div class="card full"><h2>状態別 制御の検証（引き込み/取りこぼし網羅）</h2><small>「揃え可能」＝その状態で役を引き込める押し位置が1つ以上ある。不可＝全押し位置で取りこぼし。</small><table><tr><th>状態</th><th>引き込みtier</th><th>揃え可能</th><th>到達出目数</th></tr>`;
+  (res.coverage||[]).forEach(c=>{h+=`<tr><td>${escapeHtml(c.key)}</td><td>${c.hasAlignTier?'あり':'<span style="color:var(--muted)">—</span>'}</td><td>${!c.hasAlignTier?'<span style="color:var(--muted)">—</span>':(c.alignable?'✔':'<span style="color:#ff5c6c">不可</span>')}</td><td>${c.boards}</td></tr>`;});
+  h+=`</table></div>`;
+  h+=`<div class="card full"><h2>定義リーチ目の検証</h2><table><tr><th>ID</th><th>名前</th><th>対象</th><th>確定段階</th><th>制約リール数</th><th>対象で出る</th><th>純ハズレで出る</th><th>チャンス目</th><th>種別</th></tr>`;
+  res.reReport.forEach(r=>{const kcls=r.haz?'khaz':('k'+(r.span||1));h+=`<tr><td style="color:var(--accent2);font-family:Consolas,monospace;">[${escapeHtml(r.uid)}]</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.bonus)}</td><td><span class="tag ${kcls}">${escapeHtml(r.kakutei)}</span></td><td>${r.span}</td><td>${r.byBonus?'✔':'<span style="color:#ff5c6c">✘</span>'}</td><td>${r.byHazure?'<span style="color:#ff5c6c">出る(NG)</span>':'出ない✔'}</td><td>${r.chance?(r.inSmallMiss?'<span style="color:#7be08a">機能✔</span>':'<span style="color:#ffce7a">出せない</span>'):'<span style="color:var(--muted)">—</span>'}</td><td>${r.misWin?'<span style="color:#7be08a">小役揃い型</span>':'<span style="color:var(--muted)">通常</span>'}</td></tr>`;});
+  h+=`</table></div>`;
+  // 定義取りこぼし目の検証（あれば）
+  if((res.missReport||[]).length){
+    h+=`<div class="card full"><h2>定義取りこぼし目の検証</h2><small>対象小役を取りこぼした時にリーチ目より先に<b>優先して</b>出す目（確定目ではありません）。他状態（ハズレ/他小役/ボーナス/重複）で出るかは情報表示（不問＝出てもエラーになりません）。</small><table><tr><th>ID</th><th>名前</th><th>対象小役</th><th>制約リール数</th><th>到達可能</th><th>純ハズレで出る</th><th>対象外で出る</th><th>取りこぼしで機能</th></tr>`;
+    res.missReport.forEach(m=>{h+=`<tr><td style="color:var(--accent2);font-family:Consolas,monospace;">[${escapeHtml(m.uid)}]</td><td>${escapeHtml(m.name)}</td><td>${escapeHtml(m.small)}</td><td>${m.span}</td><td>${m.byMiss?'✔':'<span style="color:#ff5c6c">✘(到達不能)</span>'}</td><td>${m.byHazure?'<span style="color:var(--muted)">出る(不問)</span>':'出ない'}</td><td>${m.leak?'<span style="color:var(--muted)">出る(不問)</span>':'出ない'}</td><td>${m.inTargetMiss?'<span style="color:#7be08a">機能✔</span>':'<span style="color:#ffce7a">出せない</span>'}</td></tr>`;});
+    h+=`</table></div>`;
+  }
+  if(res.ok){const ck=Object.keys(res.json.control);const preview=JSON.stringify(res.json,null,1);h+=`<div class="card full"><h2>JSON プレビュー（control 状態キー: ${escapeHtml(ck.slice(0,6).join(' / '))}${ck.length>6?' …':''}）</h2><pre>${escapeHtml(preview.slice(0,2600))}\n...</pre></div>`;}
+  R.innerHTML=h;
+  renderTester(res.ok);
+  // 検証成功時は⑧テスターへスクロール（エラー時はテスターが隠れるため結果メッセージへ）
+  (res.ok?el('testerCard'):R).scrollIntoView({behavior:'smooth',block:'start'});
+}
+function escapeHtml(s){return (''+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+/* ===== ⑦ テスター（生成済み制御を試す） ===== */
+let testerChoice={}; // step(1..3) → 採用スベリ（手動上書き）
+let tPush=[0,0,0];   // 各物理リール(0=左,1=中,2=右)の押し位置（基準段index）
+function resetTester(){testerChoice={};}
+function renderTester(ok){
+  const card=el('testerCard');if(!ok||!lastJson){card.style.display='none';return;}
+  card.style.display='';
+  const keys=Object.keys(lastJson.control);
+  const prevState=el('tState').value,prevOrder=el('tOrder').value; // 再生成しても前回の選択（フラグ/押し順/押し位置）を維持
+  el('tState').innerHTML=keys.map(k=>`<option value="${escAttr(k)}">${escapeHtml(k)}</option>`).join('');
+  if(keys.includes(prevState))el('tState').value=prevState;
+  const orders=Object.keys(lastJson.control[keys[0]]);
+  el('tOrder').innerHTML=orders.map(o=>`<option value="${escAttr(o)}">${escapeHtml(o)}</option>`).join('');
+  if(orders.includes(prevOrder))el('tOrder').value=prevOrder;
+  tPush=[0,1,2].map(r=>{const n=lastCfg.reels[r].length;return ((tPush[r]%n)+n)%n;}); // 押し位置も保持（リール長変更時は円環ラップ）
+  renderTesterInputs();resetTester();runTester();
+}
+// 押し位置ステッパー（▲=上＝index-1 / ▼=下＝index+1・円環ラップ）。図柄も表示。
+function renderTesterInputs(){
+  if(!lastCfg)return;const lbl=['左 L','中 C','右 R'];
+  el('tSteppers').innerHTML=[0,1,2].map(r=>{const n=lastCfg.reels[r].length;const v=((tPush[r]%n)+n)%n;
+    return `<div class="tcol"><div class="plabel">${lbl[r]}（${n}コマ）</div>`+
+      `<div style="display:flex;gap:10px;align-items:center;justify-content:center;">`+
+        `<div>`+
+          `<button class="tstep" onclick="tBump(${r},-1)" title="上のコマへ（0の上は${n-1}）">▲</button>`+
+          `<div style="margin:5px 0;"><span class="tval">${v}</span></div>`+
+          `<button class="tstep" onclick="tBump(${r},1)" title="下のコマへ（${n-1}の下は0）">▼</button>`+
+        `</div>`+
+        `<div title="押し位置の窓（押した瞬間）">${miniReelBoard(r,v,[])}</div>`+
+      `</div></div>`;}).join('');
+}
+function tBump(r,d){const n=lastCfg.reels[r].length;tPush[r]=((tPush[r]+d)%n+n)%n;renderTesterInputs();renderReelDock();runTester();}
+// 制御マスク co・第step停止・前停止配列prior・押し位置push → 達成可能な最上位グループの合法スベリのみ
+// （引き込める→引き込みのみ／引き込めずリーチ目可→リーチ目のみ／どちらも不可→通常目のみ）
+function tValidSlips(co,step,prior,push){const reel=co.seq[step-1],n=lastCfg.reels[reel].length;
+  const sit=step===1?co.s1:step===2?(co.s2[prior[0]]):(co.s3[prior[0]*100+prior[1]]);if(!sit)return{slips:[],sit:null};
+  const pri=[0,1,2,3,4],ALIGN=['両立','重複専用','小役','ボーナス'],MISS=['取りこぼし目'],MISS_AIM=['取りこぼし目狙い'],REACH=['リーチ目','チャンス目'];
+  const grab=(names)=>{const out=[];for(let i=0;i<sit.tiers.length;i++){if(names&&!names.includes(co.tierNames[i]))continue;const t=sit.tiers[i];for(const s of pri){const stop=((push-s)%n+n)%n;if((t>>stop)&1)out.push(s);}}return out;};
+  const grabLose=()=>{const out=[];for(const s of pri){const stop=((push-s)%n+n)%n;if((sit.lose>>stop)&1)out.push(s);}return out;};
+  let slips=grab(ALIGN);if(!slips.length)slips=grab(MISS);if(!slips.length)slips=grab(MISS_AIM);if(!slips.length)slips=grab(REACH);if(!slips.length)slips=grabLose();
+  return{slips,sit};}
+function tClassOfStop(co,sit,stop){for(let i=0;i<sit.tiers.length;i++)if((sit.tiers[i]>>stop)&1)return co.tierNames[i];if((sit.lose>>stop)&1)return '通常目';return '不可';}
+// 種別の表記：ボーナス単独の「リーチ目」tierはリーチ目と取りこぼし目を同順位で合成しているため、
+// 完成盤面が「取りこぼし目のみ（リーチ目ではない）」なら種別を『取りこぼし目』と表記して出目と一致させる。board=完成盤面（未完成はnull）。
+function tStopKind(co,sit,stop,board,big){
+  const nm=tClassOfStop(co,sit,stop);
+  if(board&&(nm==='リーチ目'||nm==='チャンス目')){
+    const mode=big?'big':'normal';
+    const isReach=lastCfg.reachEyes.some(re=>matchEye(re,board,lastCfg,mode));
+    if(!isReach){
+      const isMiss=(lastCfg.missEyes||[]).some(me=>{const r=lastCfg.smallRoles[me.target];return r&&roleInMode(r,mode)&&matchMissEye(me,board,lastCfg,mode);});
+      if(isMiss)return '取りこぼし目';
+    }
+  }
+  return nm;
+}
+function tClassColor(nm){return nm==='通常目'?'var(--muted)':nm==='取りこぼし目'?'#ffa0c0':nm==='取りこぼし目狙い'?'#d98fb0':(nm==='リーチ目'||nm==='チャンス目')?'#ffce7a':'#7be08a';}
+// 出目の意味（整列役・リーチ目）と強調セル。big=BIG中モードの状態か（モード外の役は「飾り」表示、取りこぼし目は対象モードのみ参照）
+function tOutcome(stops,big){const cfg=lastCfg,hits=[],cells=[];const mode=big?'big':'normal';
+  const addLine=(forms)=>forms.forEach(sym=>cfg.lines.forEach(L=>{if(matchLineRole(sym,L,stops,cfg.reels))[0,1,2].forEach(j=>{if(sym[j]!=='*')cells.push({reel:j,row:L.rows[j]});});}));
+  cfg.bonuses.forEach((b,k)=>{if(alignsBonus(stops,cfg,k)){hits.push('◆ボーナス整列「'+b.name+'」');addLine(roleForms(b));}});
+  cfg.smallRoles.forEach(r=>{if(r.forms.some(f=>smallFormAligns(f,stops,cfg))){hits.push('●小役入賞「'+r.name+'」'+(roleInMode(r,mode)?'':'（モード外＝入賞扱いなし）'));addLine(r.forms.map(f=>f.sym));}});
+  (cfg.missEyes||[]).forEach(me=>{const tr=cfg.smallRoles[me.target];if(!tr||!roleInMode(tr,mode))return; // 対象小役のモード外＝参照されない
+    if(matchMissEye(me,stops,cfg,mode)){hits.push('▽取りこぼし目「['+me.uid+'] '+me.name+'」(対象:'+tr.name+')');me.cells.forEach(c=>cells.push({reel:c.reel,row:c.row}));}});
+  cfg.reachEyes.forEach(re=>{if(matchEye(re,stops,cfg)){hits.push('★リーチ目「['+re.uid+'] '+re.name+'」'+((re.hasHaz&&re.chance)?'(小役ハズレ目)':re.chance?'(チャンス目)':re.hasHaz?'(小役ハズレ条件)':'')+(big?'（BIG中は参照外）':''));re.cells.forEach(c=>cells.push({reel:c.reel,row:c.row}));}});
+  if(!hits.length)hits.push('通常目（ハズレ目）');
+  return{label:hits.join('　/　'),cells};}
+function runTester(){
+  const out=el('tResult');if(!lastJson){out.innerHTML='';return;}
+  const galPrev=el('tGallery'),savedTop=galPrev?galPrev.scrollTop:0,savedLeft=galPrev?galPrev.scrollLeft:0; // 再描画でギャラリーのスクロール位置が先頭に戻らないよう保持
+  const state=el('tState').value,order=el('tOrder').value;const co=lastJson.control[state]&&lastJson.control[state][order];
+  if(!co){out.innerHTML='<div class="msg err">状態/押し順が見つかりません。再生成してください。</div>';return;}
+  const pushById={0:tPush[0],1:tPush[1],2:tPush[2]};
+  const big=state.indexOf('BIG中:')===0;
+  const seq=co.seq;const prior=[];const stops=[];const pushUsed=[];const cell={};let dead=false; // cell[リール]=各停止の情報
+  for(let step=1;step<=3;step++){const reel=seq[step-1],n=lastCfg.reels[reel].length;let push=((pushById[reel]%n)+n)%n;pushUsed[reel]=push;
+    const {slips,sit}=tValidSlips(co,step,prior,push);
+    if(!sit||!slips.length){cell[reel]={step,push,dead:true};dead=true;break;}
+    let adopt=testerChoice[step];if(adopt===undefined||!slips.includes(adopt))adopt=slips[0];
+    const boardOf=(candStop)=>{if(step!==3)return null;const bd=[];bd[seq[0]]=prior[0];bd[seq[1]]=prior[1];bd[seq[2]]=candStop;return bd;}; // 第3停止＝完成盤面（種別を実出目で解決）
+    const stop=((push-adopt)%n+n)%n;const cls=tStopKind(co,sit,stop,boardOf(stop),big);
+    const chips=slips.map(s=>{const st2=((push-s)%n+n)%n;const c=tStopKind(co,sit,st2,boardOf(st2),big);return `<span onclick="testerChoice[${step}]=${s};for(var k=${step}+1;k<=3;k++)delete testerChoice[k];runTester()" title="${escapeHtml(c)}" style="cursor:pointer;display:inline-block;margin:1px 2px;padding:1px 7px;border-radius:6px;border:1px solid ${s===adopt?'var(--accent)':'var(--border)'};background:${s===adopt?'rgba(255,176,46,.18)':'var(--code)'};color:${tClassColor(c)};font-weight:${s===adopt?'bold':'normal'};">${s}</span>`;}).join('');
+    cell[reel]={step,push,chips,adopt,stop,cls};
+    prior.push(stop);stops[reel]=stop;
+  }
+  // 結果テーブル（列＝左/中/右、行＝押し位置/合法スベリ/採用/停止/種別）。横スクロール可。
+  const RLN=['左','中','右'],cols=[0,1,2];
+  const td=(r,dfn,deadHtml)=>{const c=cell[r];if(!c)return '<td style="text-align:center;color:var(--muted);">—</td>';if(c.dead)return `<td style="text-align:center;">${deadHtml||'<span style="color:var(--muted)">—</span>'}</td>`;return `<td style="text-align:center;">${dfn(c)}</td>`;};
+  const COLW=160; // 各リール列の固定幅（合法スベリ最大5コマ分）
+  let h=`<div style="overflow-x:auto;"><table style="table-layout:fixed;width:${90+cols.length*COLW}px;"><colgroup><col style="width:90px">${cols.map(()=>`<col style="width:${COLW}px">`).join('')}</colgroup><tr><th></th>${cols.map(r=>`<th>${RLN[r]} <span style="font-size:.66rem;color:var(--muted);font-weight:normal;white-space:nowrap;">第${seq.indexOf(r)+1}停止</span></th>`).join('')}</tr>`;
+  h+=`<tr><th style="text-align:left;">押し位置</th>${cols.map(r=>{const c=cell[r];return `<td style="text-align:center;">${c?c.push:'<span style="color:var(--muted)">—</span>'}</td>`;}).join('')}</tr>`;
+  h+=`<tr><th style="text-align:left;">合法スベリ</th>${cols.map(r=>td(r,c=>c.chips,'<span style="color:#ff5c6c">なし（到達不能/未生成）</span>')).join('')}</tr>`;
+  h+=`<tr><th style="text-align:left;">採用</th>${cols.map(r=>td(r,c=>`<span style="font-weight:bold;color:var(--accent)">${c.adopt}</span>`)).join('')}</tr>`;
+  h+=`<tr><th style="text-align:left;">停止</th>${cols.map(r=>td(r,c=>c.stop)).join('')}</tr>`;
+  h+=`<tr><th style="text-align:left;">種別</th>${cols.map(r=>td(r,c=>`<span style="color:${tClassColor(c.cls)}">${escapeHtml(c.cls)}</span>`)).join('')}</tr>`;
+  h+=`</table></div>`;
+  h+=`<small>合法スベリは優先順（先頭が最優先採用）・チップをクリックで採用変更（その停止以降を再計算）。色：緑=役の引き込み／桃=取りこぼし目（確定）／薄桃=取りこぼし目狙い／黄=リーチ目・チャンス目／灰=通常目。返るのは達成可能な最上位グループのみ（確定があれば確定のみ）。</small>`;
+  // 停止形プレビュー：合法スベリコマの全組合せ（最大5×5×5=125）を一覧。
+  // 並び＝第1停止スベリ s0 ごと → 第2停止スベリ s1 ごとに1行、その行に第3停止スベリ s2 の全通りを横並び（s1全通り後に s0 を進める）。
+  // 各停止形の上段に、停止番号の上へ各リールのスベリコマ数字（種別色）を表示。採用＝アウトライン、クリックでその組合せを採用。
+  if(!dead&&stops.length===3){const oc=tOutcome(stops,big);
+    const r0=seq[0],r1=seq[1],r2=seq[2];
+    const n0=lastCfg.reels[r0].length,n1=lastCfg.reels[r1].length,n2=lastCfg.reels[r2].length;
+    const p0=pushUsed[r0],p1=pushUsed[r1],p2=pushUsed[r2];
+    const a0=stops[r0],a1=stops[r1],a2=stops[r2]; // 採用停止（アウトライン対象）
+    h+=`<div class="plabel" style="margin-top:14px;margin-bottom:6px;">停止形（合法スベリ全組合せ・各リールのスベリコマを停止番号の上に表示／採用＝枠／クリックで採用）</div>`;
+    h+=`<div id="tGallery" style="max-height:680px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;">`;
+    const sl0=tValidSlips(co,1,[],p0);
+    sl0.slips.forEach((s0,gi)=>{const st0=((p0-s0)%n0+n0)%n0;const c0=tClassColor(tStopKind(co,sl0.sit,st0,null,big));
+      const sl1=tValidSlips(co,2,[st0],p1);let grp='';
+      sl1.slips.forEach(s1=>{const st1=((p1-s1)%n1+n1)%n1;const c1=tClassColor(tStopKind(co,sl1.sit,st1,null,big));
+        const sl2=tValidSlips(co,3,[st0,st1],p2);let row='';
+        sl2.slips.forEach(s2=>{const st2=((p2-s2)%n2+n2)%n2;const bd=[];bd[r0]=st0;bd[r1]=st1;bd[r2]=st2;
+          const k2=tStopKind(co,sl2.sit,st2,bd,big),c2=tClassColor(k2),boc=tOutcome(bd,big),sel=(st0===a0&&st1===a1&&st2===a2);
+          const nums=[],cols=[];nums[r0]=s0;nums[r1]=s1;nums[r2]=s2;cols[r0]=c0;cols[r1]=c1;cols[r2]=c2;
+          row+=`<div onclick="testerChoice[1]=${s0};testerChoice[2]=${s1};testerChoice[3]=${s2};runTester()" title="種別: ${escapeHtml(k2)}" style="cursor:pointer;padding:2px;border-radius:7px;${sel?'outline:3px solid var(--accent);outline-offset:1px;background:rgba(255,176,46,.10);':''}">${miniBoardSlips(bd,boc.cells,nums,cols)}</div>`;
+        });
+        grp+=`<div style="display:flex;gap:8px;align-items:flex-start;margin:2px 0;">${row}</div>`;
+      });
+      h+=`<div style="${gi>0?'margin-top:8px;padding-top:6px;border-top:1px dashed var(--border);':''}">${grp}</div>`;
+    });
+    h+=`</div>`;
+    // 出目コメント（採用＝アウトライン中の停止形）：全幅・折り返しでレイアウトが崩れない
+    h+=`<div style="margin-top:12px;padding:9px 13px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:#ffd479;font-size:.9rem;line-height:1.7;word-break:break-word;overflow-wrap:anywhere;">出目（採用）: ${escapeHtml(oc.label)}</div>`;
+  }
+  out.innerHTML=h;
+  const gal=el('tGallery');if(gal){gal.scrollTop=savedTop;gal.scrollLeft=savedLeft;} // スクロール位置を復元（クリックで先頭に戻らない）
+}
+// 逃げ場なしトラップ1件を、完成リールの0〜4コマ盤面（いずれも禁止目）で可視化
+function trapPreview(t){
+  const seq=t.seq,m=t.stopNo-1,mReel=t.reelIdx,n=lastCfg.reels[mReel].length;
+  let h=`<div style="margin:8px 0 12px;"><div style="font-size:.78rem;color:var(--muted);margin-bottom:4px;">「[${escapeHtml(t.uid||'')}] ${escapeHtml(t.re)}」${escapeHtml(t.order)}・第${t.stopNo}停止${t.reel}${t.pref?`(テンパイ ${escapeHtml(t.pref)})`:''}・押し${t.push}</div><div style="display:flex;gap:10px;flex-wrap:wrap;">`;
+  for(let s=0;s<=4;s++){const stop=((t.push-s)%n+n)%n;const st=[0,0,0];for(let k=0;k<m;k++)st[seq[k]]=t.prefStops[k];st[mReel]=stop;
+    const rs=isReachEye(st,lastCfg)?'リーチ目':isSmallWin(st,lastCfg)?'小役':anyBonusAlign(st,lastCfg)?'整列':'先詰み';
+    h+=`<div style="text-align:center;"><div style="font-size:.7rem;color:var(--muted);">${s}コマ</div>${miniBoard(st,t.cells)}<div style="font-size:.7rem;color:#ff8d99;">${rs}</div></div>`;}
+  return h+'</div></div>';
+}
+function miniBoard(stops,cells){const cset=new Set(cells.map(c=>c.reel+'-'+c.row));
+  let h='<div class="mb"><div class="mbr">';
+  for(let r=0;r<3;r++){const n=lastCfg.reels[r].length;h+=`<span class="mbi">${((stops[r]-REF)%n+n)%n}</span>`;}
+  h+='</div>';
+  [-1,0,1,2,3].forEach(row=>{const frame=(row===-1||row===3);h+=`<div class="mbr"${frame?' style="opacity:.5"':''}>`;for(let r=0;r<3;r++){h+=`<span class="mbc${cset.has(r+'-'+row)?' on':''}">${symChip(symAtRow(lastCfg.reels[r],stops[r],row),18)}</span>`;}h+='</div>';});
+  return h+'</div>';}
+// 単一リールの窓プレビュー（押し位置の窓）。stop=その時の停止/押しindex。rows=強調する row（省略可）。miniBoard と同じ表示規約。
+function miniReelBoard(r,stop,rows){const n=lastCfg.reels[r].length;const cs=new Set(rows||[]);
+  let h=`<div class="mb"><div class="mbr"><span class="mbi">${((stop-REF)%n+n)%n}</span></div>`;
+  [-1,0,1,2,3].forEach(row=>{const frame=(row===-1||row===3);h+=`<div class="mbr"${frame?' style="opacity:.5"':''}><span class="mbc${cs.has(row)?' on':''}">${symChip(symAtRow(lastCfg.reels[r],stop,row),18)}</span></div>`;});
+  return h+'</div>';}
+// miniBoard に「スベリコマ数の行（停止番号の上）」を上乗せ。slipNums/slipCols は物理リール[0,1,2]ごとの数字と色。
+function miniBoardSlips(stops,cells,slipNums,slipCols){const cset=new Set(cells.map(c=>c.reel+'-'+c.row));
+  let h='<div class="mb"><div class="mbr">';
+  for(let r=0;r<3;r++)h+=`<span class="mbi" style="color:${slipCols[r]};font-weight:bold;">${slipNums[r]}</span>`; // スベリコマ
+  h+='</div><div class="mbr">';
+  for(let r=0;r<3;r++){const n=lastCfg.reels[r].length;h+=`<span class="mbi">${((stops[r]-REF)%n+n)%n}</span>`;} // 停止番号
+  h+='</div>';
+  [-1,0,1,2,3].forEach(row=>{const frame=(row===-1||row===3);h+=`<div class="mbr"${frame?' style="opacity:.5"':''}>`;for(let r=0;r<3;r++){h+=`<span class="mbc${cset.has(r+'-'+row)?' on':''}">${symChip(symAtRow(lastCfg.reels[r],stops[r],row),18)}</span>`;}h+='</div>';});
+  return h+'</div>';}
+function fillPreview(i){const c=el('prev_'+i);if(!c||c.dataset.filled)return;c.dataset.filled='1';const keys=lastReBoards[i]||[];const cells=lastCfg.reachEyes[i].cells;const N=12;if(!keys.length){c.innerHTML='<small>該当する実出目がありません（到達不能）。</small>';return;}c.innerHTML=keys.slice(0,N).map(k=>miniBoard(keyToStops(k),cells)).join('')+(keys.length>N?`<div class="morerow"><button class="sec tiny" onclick="showAllPreview(${i})">全 ${keys.length} 件を表示</button></div>`:'');}
+function showAllPreview(i){const c=el('prev_'+i);const keys=lastReBoards[i]||[];const cells=lastCfg.reachEyes[i].cells;const CAP=600;c.innerHTML=keys.slice(0,CAP).map(k=>miniBoard(keyToStops(k),cells)).join('')+(keys.length>CAP?`<div class="morerow"><small>表示は先頭${CAP}件（全${keys.length}件）</small></div>`:'');}
+function download(){if(!lastJson)return;const blob=new Blob([JSON.stringify(lastJson,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='reel-control.json';a.click();URL.revokeObjectURL(url);}
+function saveProject(){
+  const proj={v:1,symbols,symImages,reels,bonuses:bonusesData,smallRoles:smallRolesData,reachEyes:reachEyesData,missEyes:missEyesData,refRow:el('refRow').value};
+  const blob=new Blob([JSON.stringify(proj)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='reel-project.json';a.click();URL.revokeObjectURL(url);
+}
+function loadProject(inp){const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const p=JSON.parse(e.target.result);
+  symbols=p.symbols||symbols;symImages=p.symImages||{};reels=p.reels||reels;bonusesData=p.bonuses||[];smallRolesData=p.smallRoles||[];reachEyesData=p.reachEyes||[];missEyesData=p.missEyes||[];
+  smallRolesData.forEach(r=>{if(r.dupOnly===undefined)r.dupOnly=false;if(!r.dupBonuses)r.dupBonuses=[];if(!r.mode)r.mode='both';}); // 旧データ：重複専用OFF・モード=通常＋BIG中（既定）
+  reachEyesData.forEach(re=>{if(re.bonus!==undefined){if(!re.bonuses)re.bonuses=re.bonus?[re.bonus]:[];delete re.bonus;}if(!re.bonuses)re.bonuses=[];if(re.chance===undefined)re.chance=false;if(re.disabled===undefined)re.disabled=false; // 旧データ：チャンス目可既定OFF・無効既定OFF
+    if(!re.grid)re.grid=newGrid();else if(re.grid.length===3)re.grid=[[null,null,null],re.grid[0],re.grid[1],re.grid[2],[null,null,null]];}); // 旧単一対象→配列／旧3段グリッド→5段（枠上/枠下を空で追加）へ移行
+  missEyesData.forEach(me=>{if(me.small===undefined)me.small='';if(me.collapsed===undefined)me.collapsed=false;if(me.disabled===undefined)me.disabled=false;
+    if(!me.grid)me.grid=newGrid();else if(me.grid.length===3)me.grid=[[null,null,null],me.grid[0],me.grid[1],me.grid[2],[null,null,null]];}); // 取りこぼし目：旧データ既定値
+  if(p.refRow!=null)el('refRow').value=p.refRow;
+  symSeq=symbols.filter(s=>/^S\d+$/.test(s.id)).reduce((m,s)=>Math.max(m,+s.id.slice(1)),0);
+  reachSeq=reachEyesData.length;bonusSeq=bonusesData.length;missSeq=missEyesData.length;
+  if(!symbols.find(s=>s.id===brush))brush=symbols[0]?symbols[0].id:'R7';
+  renderAll();el('result').innerHTML='<div class="msg ok">プロジェクトを読み込みました。</div>';
+  }catch(err){el('result').innerHTML='<div class="msg err">読込失敗: '+escapeHtml(err.message)+'</div>';}
+  inp.value='';};r.readAsText(f);}
+
+/* ===== C# コード出力 ===== */
+function csHeader(){
+  const names=['上段','中段','下段'],rn=names[REF];
+  const win=names.map((nm,r)=>`//        ${nm} = Reel[(stop + (${r-REF}) + n) % n]`).join('\n');
+  return `// ============================================================
+// ReelStopValidator.cs — 全状態 リール停止制御＆バリデータ（本ツールの自動生成）
+//
+// 【役割】各フラグ状態で「達成可能な最上位グループの合法スベリ"だけ"」を配列で返します。
+//        引き込める→引き込みスベリのみ（取りこぼし除外）／引き込めずリーチ目可→リーチ目スベリのみ（通常目除外）／
+//        どちらも不可→禁止目でない通常目のみ。どれを選んでもその状態の禁止目は出ません。先頭ほど優先。
+//
+// 【状態 state】 "ハズレ" / "小役:<名>" / "ボーナス:<名>" / "ボーナス:<名>+小役:<名>"（重複・小役優先）
+//        ／ "BIG中:ハズレ" / "BIG中:小役:<名>"（BIG中モード。BIG中にボーナス・重複は無し）。
+//        定義済みキーは Control.Keys を参照。BIG中の禁止目はボーナス図柄の整列と「通常時のみ」小役の整列（リーチ目等は参照されない）。
+// 【位置の基準段】push/stop は「${rn}」にある図柄の index を指します。
+// 【押し順 order】 第1停止は左固定。"順押し"(左→中→右) / "ハサミ"(左→右→中)。
+//        第k停止で物理的にどのリールが止まるかは Control[state][order].Seq（0=左,1=中,2=右）の Seq[k-1]。
+//
+// 【使い方】リールを止めるたびに ValidSlips を呼び、返った合法スベリから採用（先頭=最優先）：
+//    int[] ok1 = ReelStopValidator.ValidSlips(state, order, 1, new int[0],      p1);
+//    int   sl1 = ok1[0];
+//    int reel1 = Control[state][order].Seq[0]; int n1 = Reels[reel1].Length;
+//    int stop1 = ((p1 - sl1) % n1 + n1) % n1;          // 実際に止める基準段 index（上→下回転＝index 降順に滑る）
+//    int[] ok2 = ValidSlips(state, order, 2, new[]{stop1},        p2);
+//    int[] ok3 = ValidSlips(state, order, 3, new[]{stop1, stop2}, p3);
+//
+//    ★ 出し分け：CanAlign / AlignSlips / MissSlips / ReachSlips / LoseSlips(state, order, step, prior, push)。
+//      MissSlips=取りこぼし目(確定＝どう止めても出る)／MissAimSlips=取りこぼし目狙い(後リール次第)。ValidSlips は Align→Miss(確定)→MissAim(狙い)→Reach→Lose の順で達成可能な最上位グループのみ返す。
+//      例「揃えられるなら揃える、無理ならあえてリーチ目」→ var a=AlignSlips(...); var s = a.Length>0 ? a[0] : ReachSlips(...)[0];
+//    ★ slipPriority（任意・末尾引数）= 0〜4 の並べ替え。同じ優先tier内のタイブレークに使用。省略時 {0,1,2,3,4}。
+//    ★ prior = これまでに止めた停止位置（基準段 index）を押した順に並べた配列（1本目は new int[0]）。
+//    ★ pN    = ボタンを押した瞬間に「${rn}」にあった図柄の index(0始まり)。
+//    ★ 互換：Haz[...] と ValidSlips(order, step, prior, push[, pri]) は旧来のハズレ専用APIです。
+//
+// 【窓の図柄(参考)】停止 index=stop, リール長=n のとき
+${win}
+// ※ 停止マスクが 32bit int のためリール長は 31 以下を前提（スロットは最大21コマ）。
+// ============================================================
+`;
+}
+function csChunk(arr){let s='';for(let i=0;i<arr.length;i++){s+=arr[i];if(i<arr.length-1)s+=',';if(i%40===39)s+='\n        ';}return s;}
+function csSit(sit){return 'new Situation{Tiers=new int[]{'+sit.tiers.join(',')+'},Lose='+sit.lose+'}';}
+function csCtrlOrder(h){
+  const s2=Object.keys(h.s2).map(k=>'{'+k+','+csSit(h.s2[k])+'}');
+  const s3=Object.keys(h.s3).map(k=>'{'+k+','+csSit(h.s3[k])+'}');
+  return 'new CtrlOrder{Seq=new int[]{'+h.seq.join(',')+'},TierNames=new string[]{'+h.tierNames.map(x=>JSON.stringify(x)).join(',')+'},S1='+csSit(h.s1)+',\n        S2=new Dictionary<int,Situation>{'+csChunk(s2)+'},\n        S3=new Dictionary<int,Situation>{'+csChunk(s3)+'}}';
+}
+function toCSharp(json,cfg){
+  const q=s=>JSON.stringify(s),rl=json.meta.reels;
+  let o=csHeader()+'using System.Collections.Generic;\nusing System.Linq;\n\npublic static class ReelStopValidator {\n';
+  o+='  public class Situation { public int[] Tiers; public int Lose; }          // Tiers[i]=優先tier i の合法停止マスク, Lose=通常目マスク\n';
+  o+='  public class CtrlOrder { public int[] Seq; public string[] TierNames; public Situation S1; public Dictionary<int,Situation> S2; public Dictionary<int,Situation> S3; }\n';
+  o+='  public class HazOrder { public int[] Seq; public int S1; public Dictionary<int,int> S2; public Dictionary<int,int> S3; } // 互換\n\n';
+  o+='  public static readonly string[] ReelL = { '+rl.L.map(q).join(', ')+' };\n';
+  o+='  public static readonly string[] ReelC = { '+rl.C.map(q).join(', ')+' };\n';
+  o+='  public static readonly string[] ReelR = { '+rl.R.map(q).join(', ')+' };\n';
+  o+='  public static readonly string[][] Reels = { ReelL, ReelC, ReelR };\n';
+  o+='  public static readonly int[] DefaultSlipPriority = { 0, 1, 2, 3, 4 };\n';
+  o+='  static readonly System.Collections.Generic.HashSet<string> AlignTierNames   = new System.Collections.Generic.HashSet<string>{ "両立","重複専用","小役","ボーナス" };\n';
+  o+='  static readonly System.Collections.Generic.HashSet<string> MissTierNames    = new System.Collections.Generic.HashSet<string>{ "取りこぼし目" };       // 確定＝どう止めても取りこぼし目が出る\n';
+  o+='  static readonly System.Collections.Generic.HashSet<string> MissAimTierNames = new System.Collections.Generic.HashSet<string>{ "取りこぼし目狙い" };   // 狙い＝後リール次第で出る\n';
+  o+='  static readonly System.Collections.Generic.HashSet<string> ReachTierNames   = new System.Collections.Generic.HashSet<string>{ "リーチ目","チャンス目" };\n\n';
+  // Control（主成果物）
+  o+='  // ★主成果物：状態→押し順→停止制御。Tiers は引き込み優先順（先頭ほど優先）、最後に Lose（通常目）。\n';
+  o+='  public static readonly Dictionary<string,Dictionary<string,CtrlOrder>> Control = new Dictionary<string,Dictionary<string,CtrlOrder>>{\n';
+  Object.keys(json.control).forEach(stk=>{const M=json.control[stk];
+    o+='    {'+q(stk)+', new Dictionary<string,CtrlOrder>{\n';
+    Object.keys(M).forEach(on=>{o+='      {'+q(on)+', '+csCtrlOrder(M[on])+'},\n';});
+    o+='    }},\n';
+  });
+  o+='  };\n\n';
+  // Haz 互換
+  o+='  // 互換：ハズレ専用バリデータ（旧API）。bit i = 停止 i が合法。\n';
+  o+='  public static readonly Dictionary<string, HazOrder> Haz = new Dictionary<string, HazOrder> {\n';
+  Object.keys(json.validator).forEach(on=>{const h=json.validator[on];
+    const s2=Object.keys(h.s2).map(k=>'{'+k+','+h.s2[k]+'}');
+    const s3=Object.keys(h.s3).map(k=>'{'+k+','+h.s3[k]+'}');
+    o+='    { '+q(on)+', new HazOrder { Seq = new int[]{'+h.seq.join(',')+'}, S1 = '+h.s1+',\n      S2 = new Dictionary<int,int>{'+csChunk(s2)+'},\n      S3 = new Dictionary<int,int>{'+csChunk(s3)+'} } },\n';
+  });
+  o+='  };\n\n';
+  // API
+  o+='  static Situation SituationOf(string state, string order, int step, int[] prior) {\n';
+  o+='    var co = Control[state][order];\n';
+  o+='    return step==1 ? co.S1 : step==2 ? co.S2[prior[0]] : co.S3[prior[0]*100 + prior[1]];\n';
+  o+='  }\n';
+  o+='  static int ReelOf(string state, string order, int step) { return Control[state][order].Seq[step-1]; }\n\n';
+  o+='  // 主API：達成可能な最上位グループのスベリ"だけ"を返す。検証が通っていれば必ず1要素以上。\n';
+  o+='  //   引き込める → 引き込みのみ／引き込めず取りこぼし目(確定=どう止めても出る)可 → それのみ／無ければ取りこぼし目狙い(後リール次第) → リーチ目 → 通常目。\n';
+  o+='  // ※ リールは上→下回転のため stop = (push - slip + n) % n。\n';
+  o+='  public static int[] ValidSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) {\n';
+  o+='    var a  = AlignSlips  (state, order, step, prior, push, slipPriority); if (a.Length  > 0) return a;  // 引き込めるなら引き込みのみ（取りこぼし除外）\n';
+  o+='    var m  = MissSlips   (state, order, step, prior, push, slipPriority); if (m.Length  > 0) return m;  // 取りこぼし目(確定)があればそれのみ（狙い/リーチ目/通常目除外）\n';
+  o+='    var ma = MissAimSlips(state, order, step, prior, push, slipPriority); if (ma.Length > 0) return ma; // 確定が無ければ取りこぼし目狙い（後リール次第で出す）\n';
+  o+='    var r  = ReachSlips  (state, order, step, prior, push, slipPriority); if (r.Length  > 0) return r;  // さらに無理でリーチ目可ならリーチ目のみ（通常目除外）\n';
+  o+='    return LoseSlips(state, order, step, prior, push, slipPriority);                                    // いずれも不可なら禁止目でない通常目のみ\n';
+  o+='  }\n';
+  o+='  public static int[] ValidSlips(string state, string order, int step, int[] prior, int push) { return ValidSlips(state, order, step, prior, push, DefaultSlipPriority); }\n\n';
+  o+='  // クラス別取得：名前述語に合致する tier（＋必要なら lose）の合法スベリのみ。\n';
+  o+='  static int[] SlipsByTier(string state, string order, int step, int[] prior, int push, int[] slipPriority, System.Func<string,bool> tierOk) {\n';
+  o+='    var co = Control[state][order]; int n = Reels[co.Seq[step-1]].Length; var sit = SituationOf(state,order,step,prior); var outp = new List<int>();\n';
+  o+='    for (int t = 0; t < sit.Tiers.Length; t++) { if (!tierOk(co.TierNames[t])) continue; int mask = sit.Tiers[t]; foreach (int s in slipPriority) { int stop = ((push - s) % n + n) % n; if (((mask >> stop) & 1) != 0) outp.Add(s); } }\n';
+  o+='    return outp.ToArray();\n';
+  o+='  }\n';
+  o+='  public static int[] AlignSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, AlignTierNames.Contains); }\n';
+  o+='  public static int[] AlignSlips(string state, string order, int step, int[] prior, int push) { return AlignSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
+  o+='  public static int[] MissSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, MissTierNames.Contains); }\n';
+  o+='  public static int[] MissSlips(string state, string order, int step, int[] prior, int push) { return MissSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
+  o+='  public static int[] MissAimSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, MissAimTierNames.Contains); }\n';
+  o+='  public static int[] MissAimSlips(string state, string order, int step, int[] prior, int push) { return MissAimSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
+  o+='  public static int[] ReachSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, ReachTierNames.Contains); }\n';
+  o+='  public static int[] ReachSlips(string state, string order, int step, int[] prior, int push) { return ReachSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
+  o+='  public static int[] LoseSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) {\n';
+  o+='    int n = Reels[ReelOf(state,order,step)].Length; var sit = SituationOf(state,order,step,prior); var outp = new List<int>();\n';
+  o+='    foreach (int s in slipPriority) { int stop = ((push - s) % n + n) % n; if (((sit.Lose >> stop) & 1) != 0) outp.Add(s); } return outp.ToArray();\n';
+  o+='  }\n';
+  o+='  public static int[] LoseSlips(string state, string order, int step, int[] prior, int push) { return LoseSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
+  o+='  public static bool CanAlign(string state, string order, int step, int[] prior, int push) { return AlignSlips(state,order,step,prior,push).Length > 0; }\n\n';
+  o+='  // 互換：旧ハズレ専用 ValidSlips（state を取らない版）。\n';
+  o+='  public static int[] ValidSlips(string order, int step, int[] prior, int push, int[] slipPriority) {\n';
+  o+='    var h = Haz[order]; int reel = h.Seq[step-1]; int n = Reels[reel].Length;\n';
+  o+='    int mask = step==1 ? h.S1 : step==2 ? h.S2[prior[0]] : h.S3[prior[0]*100 + prior[1]];\n';
+  o+='    var outp = new List<int>(); foreach (int s in slipPriority) { int stop = ((push - s) % n + n) % n; if (((mask >> stop) & 1) != 0) outp.Add(s); } return outp.ToArray();\n';
+  o+='  }\n';
+  o+='  public static int[] ValidSlips(string order, int step, int[] prior, int push) { return ValidSlips(order, step, prior, push, DefaultSlipPriority); }\n';
+  o+='}\n';
+  return o;
+}
+function downloadCS(){if(!lastJson||!lastCfg)return;const blob=new Blob([toCSharp(lastJson,lastCfg)],{type:'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='ReelStopValidator.cs';a.click();URL.revokeObjectURL(url);}
+
+/* ===== 既定サンプル ===== */
+function gridSet(list){const g=newGrid();list.forEach(([row,reel,sym])=>{g[row+1][reel]=sym;});return g;} // 既定サンプルは row=0上/1中/2下 を grid行+1（枠上を空ける）に配置
+function loadDefaults(){
+  symbols=[{id:'R7',label:'赤7',color:'#ff5c6c'},{id:'B7',label:'青7',color:'#2979ff'},{id:'RE',label:'REG',color:'#aeb9c7'},
+    {id:'b',label:'ﾍﾞﾙ',color:'#ffcf5a'},{id:'r',label:'ﾘﾌﾟ',color:'#7fd4ff'},{id:'s',label:'ｽｲｶ',color:'#7be08a'},
+    {id:'c',label:'ﾁｪﾘｰ',color:'#ff9ed1'},{id:'-',label:'－',color:'#5b6b7d'}];
+  brush='R7';
+  reels=[parseReel("R7 b s r c RE b s r B7 b s r RE b s r - b s r"),
+         parseReel("RE b s r R7 b s r c b s r B7 b s r RE b s r -"),
+         parseReel("b s r RE R7 b s r c b s r B7 RE b s r - b s r")];
+  bonusesData=[{name:'赤7BIG',sym:['R7','R7','R7']},{name:'青7BIG',sym:['B7','B7','B7']},{name:'REG',sym:['RE','RE','RE']}];bonusSeq=3;
+  smallRolesData=[{name:'ベル',sym:['b','b','b']},{name:'スイカ',sym:['s','s','s']},{name:'チェリー',sym:['c','*','*']},{name:'リプレイ',sym:['r','r','r']}];
+  reachEyesData=[
+    {name:'左中赤7・1確',bonuses:['赤7BIG'],grid:gridSet([[1,0,'R7']])},
+    {name:'左中青7・1確',bonuses:['青7BIG'],grid:gridSet([[1,0,'B7']])},
+    {name:'右下がりREGテンパイ・2確',bonuses:['REG'],grid:gridSet([[0,0,'RE'],[1,1,'RE']])},
+    {name:'上段赤7テンパイ非揃い・3確',bonuses:['赤7BIG'],grid:gridSet([[0,0,'R7'],[0,1,'R7'],[1,2,'R7']])},
+  ];reachSeq=reachEyesData.length;
+  missEyesData=[];missSeq=0; // 取りこぼし目は既定なし（GUIで追加）
+}
+el('btnGen').addEventListener('click',run);
+el('btnDl').addEventListener('click',download);
+el('btnCs').addEventListener('click',downloadCS);
+// 表題クリックでカード折りたたみ（既定は展開）。動的に生成される結果カードにも委譲で効く
+document.addEventListener('click',function(e){const h2=e.target.closest?e.target.closest('h2'):null;if(h2&&h2.parentElement&&h2.parentElement.classList.contains('card'))h2.parentElement.classList.toggle('collapsed');});
+loadDefaults();renderAll();applyDock();
+</script>
+</body>
+</html>
