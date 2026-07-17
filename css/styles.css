@@ -265,6 +265,12 @@ main {
   color: var(--color-text-muted);
 }
 
+/* --- Tool Grid (single card, game-card size, centered) --- */
+.tool-grid {
+  grid-template-columns: minmax(260px, calc((100% - 3.5rem) / 3));
+  justify-content: center;
+}
+
 /* --- Button --- */
 .btn {
   display: inline-block;
@@ -424,6 +430,10 @@ main {
     grid-template-columns: 1fr;
     padding: 1rem;
     gap: 1.25rem;
+  }
+
+  .tool-grid {
+    grid-template-columns: 1fr;
   }
 
   .container {
