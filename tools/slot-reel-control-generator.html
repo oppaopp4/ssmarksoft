@@ -581,8 +581,13 @@ function reachEyeTrapScan(cfg){
       (function rec(i,acc){
         if(i===m){if(prefixHasRoleWin(acc))return;blockedPushes(acc).forEach(pm=>out.push({re:re.name,uid:re.uid,cells:re.cells,order:o.name,seq:seq.slice(),stopNo:m+1,reelIdx:mReel,reel:RL[mReel],pref:acc.map((s,k)=>RL[seq[k]]+'='+s).join(','),prefStops:acc.slice(),push:pm}));return;}
         for(const s of cand[i]){
-          // 到達不能テンパイの除外：第2停止が先読み上 非合法（=完成リールが完成不能なので制御が必ず避ける停止）
-          // の場合、そのテンパイ自体が実出目として成立しない。完成リールの逃げ場(SOFT)を論じる前に第2リールで蹴られるため除外。
+          // 到達不能テンパイの除外：先行停止プレフィックスが先読み上 非合法＝制御が必ず避ける停止なら、
+          // そのテンパイ自体が実出目として成立しない（完成リールの逃げ場を論じる前に手前のリールで蹴られる）ので除外。
+          //   i===0（第1停止）：feasMid=false の左停止（例：左1リール小役ハズレ目で列が全滅する停止）は
+          //     制御が絶対に止めない（controlMasks も feasMid で除外）。順押し/ハサミは左が必ず第1停止なので、
+          //     この左停止から派生する中/右完成目のテンパイは実際には発生しない＝逃げ場は左リールで既に担保済み。
+          //   i===1（第2停止）：feasLast=false なら完成リールが完成不能で第2リールが必ず蹴られる。
+          if(i===0&&!feas.feasMid(s))continue;
           if(i===1&&!feas.feasLast(acc[0],s))continue;
           rec(i+1,acc.concat(s));
         }
