@@ -503,9 +503,51 @@ function controlMasks(st,cfg){
       s3[sa*100+sb]=mm;}}
     out[o.name]={seq:order,tierNames,s1,s2,s3};
   });
+  ORDERS.forEach(o=>bandAlignByCoverage(out[o.name],cfg)); // §6-a1：align tier を後リールの引き込み網羅で並べ替え（ok[0]＝最も取りこぼしにくい停止）
   return out;
 }
 const ALIGN_TIERS=['両立','重複専用','小役','ボーナス'],MISS_TIERS=['取りこぼし目','取りこぼし目狙い'],REACH_TIERS=['リーチ目','チャンス目'];
+// §6-a1：同一 align tier 内を「後リールの引き込み網羅（coverage）」の降順にサブ tier（同名・優先順位のみ差）へ分割する。
+// リーチ目が feasLast で第3停止まで先読みして停止コマを選ぶのと同様に、小役/ボーナスの引き込みでも
+// 「その停止から先で対象役を引き込める押し位置が多い停止」を ok[0] に来させる（取りこぼしを最小化）。
+//   coverage(第2停止 sb)=第3停止で対象を引き込める押し位置 pc の数（slip 0..4 で s3 の align 停止に届く）。
+//   coverage(第1停止 sa)=Σ_pb〔届く align 第2停止の coverage の最大〕。第3停止は完成＝全 align 同点（分割しない）。
+// マスクの和・lose は不変＝合法性/袋小路/acceptable は一切変えない（並べ替えのみ）。coverage が一定の tier は分割しない。
+function bandAlignByCoverage(co,cfg){
+  const [a,b,c]=co.seq;
+  const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+  const oldNames=co.tierNames;
+  const alignIdx=oldNames.map((nm,i)=>ALIGN_TIERS.includes(nm)?i:-1).filter(i=>i>=0);
+  if(!alignIdx.length)return;
+  const bits=m=>{const r=[];for(let i=0;i<31;i++)if((m>>i)&1)r.push(i);return r;};
+  const alignUnion=sit=>alignIdx.reduce((m,i)=>m|sit.tiers[i],0);
+  const s3u={};Object.keys(co.s3).forEach(k=>{s3u[k]=alignUnion(co.s3[k]);}); // 第3停止 align 和
+  const s2u={};Object.keys(co.s2).forEach(k=>{s2u[k]=alignUnion(co.s2[k]);}); // 第2停止 align 和
+  const covS2=(sa,sb)=>{const u=s3u[sa*100+sb];if(!u)return 0;let cnt=0;for(let pc=0;pc<nc;pc++){for(let s=0;s<5;s++){if((u>>(((pc-s)%nc+nc)%nc))&1){cnt++;break;}}}return cnt;};
+  const covS1=sa=>{const u=s2u[sa];if(u===undefined)return 0;let sum=0;for(let pb=0;pb<nb;pb++){let best=-1;for(let s=0;s<5;s++){const sb=((pb-s)%nb+nb)%nb;if((u>>sb)&1){const v=covS2(sa,sb);if(v>best)best=v;}}if(best>0)sum+=best;}return sum;};
+  const score=(kind,sa,stop)=>kind===1?covS1(stop):kind===2?covS2(sa,stop):0; // 第3停止(kind=3)は同点＝band0固定
+  // 各 align tier の band 数＝全 situation を通じた「異なる coverage 値の最大個数」（第3停止は寄与しない＝分割対象外）
+  const situ=[{kind:1,sa:-1,sit:co.s1}];Object.keys(co.s2).forEach(k=>situ.push({kind:2,sa:+k,sit:co.s2[k]}));
+  const band=alignIdx.map(()=>1);
+  situ.forEach(({kind,sa,sit})=>alignIdx.forEach((i,ai)=>{const vs=new Set(bits(sit.tiers[i]).map(s=>score(kind,sa,s)));if(vs.size>band[ai])band[ai]=vs.size;}));
+  if(band.every(k=>k===1))return; // coverage 一定＝分割不要（例：常に整列可のチェリー等）
+  const newNames=[],slotMap=[];
+  oldNames.forEach((nm,i)=>{const ai=alignIdx.indexOf(i);
+    if(ai>=0){slotMap[i]=[];for(let j=0;j<band[ai];j++){slotMap[i].push(newNames.length);newNames.push(nm);}} // align＝band数ぶん同名サブtier
+    else{slotMap[i]=[newNames.length];newNames.push(nm);}});
+  const NT=newNames.length;
+  const remap=(sit,kind,sa)=>{const T=new Array(NT).fill(0);
+    oldNames.forEach((nm,i)=>{const mask=sit.tiers[i];const ai=alignIdx.indexOf(i);
+      if(ai<0){T[slotMap[i][0]]|=mask;return;}
+      const stops=bits(mask);if(!stops.length)return;
+      const uniq=[...new Set(stops.map(s=>score(kind,sa,s)))].sort((x,y)=>y-x); // 高coverage→先頭band（rank0＝最優先）
+      stops.forEach(s=>{let r=uniq.indexOf(score(kind,sa,s));if(r>=slotMap[i].length)r=slotMap[i].length-1;T[slotMap[i][r]]|=(1<<s);});});
+    return {tiers:T,lose:sit.lose};};
+  const ns1=remap(co.s1,1,-1),ns2={},ns3={};
+  Object.keys(co.s2).forEach(k=>ns2[k]=remap(co.s2[k],2,+k));
+  Object.keys(co.s3).forEach(k=>ns3[k]=remap(co.s3[k],3,-1));
+  co.tierNames=newNames;co.s1=ns1;co.s2=ns2;co.s3=ns3;
+}
 function legalMaskOf(sit){let m=sit.lose;sit.tiers.forEach(t=>m|=t);return m;} // 合法停止＝全tier|lose
 // 状態の袋小路検出（0〜4 のどのスベリでも合法停止が無い押し位置）
 function deadEndsForState(st,M,cfg){
