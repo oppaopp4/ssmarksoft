@@ -228,7 +228,8 @@
       <b style="color:var(--ink);">出し分け</b>：<code>CanAlign / AlignSlips / MissSlips / ReachSlips / LoseSlips(state, order, step, prior, push)</code> で tier別にも取得可。<br>
       例「揃えられるなら揃える、無理ならあえてリーチ目（ガセ含む）」→ <code>var a=AlignSlips(...); int s = a.Length>0 ? a[0] : ReachSlips(...)[0];</code><br><br>
 
-      <b style="color:var(--ink);">戻り値</b>：<b>達成可能な最上位グループのスベリだけ</b>を返します（必ず1要素以上）。<b>引き込める→引き込みスベリのみ</b>／<b>引き込めず取りこぼし目可→取りこぼし目スベリのみ</b>／<b>さらに無理でリーチ目可→リーチ目スベリのみ</b>／<b>いずれも不可→通常目のみ</b>。どれを採っても禁止目は出ません。採用したスベリ <code>s</code> から
+      <b style="color:var(--ink);">戻り値</b>：<b>達成可能な最上位グループのスベリだけ</b>を返します（必ず1要素以上）。<b>引き込める→引き込みスベリのみ</b>／<b>引き込めず取りこぼし目可→取りこぼし目スベリのみ</b>／<b>さらに無理でリーチ目可→リーチ目スベリのみ</b>／<b>いずれも不可→通常目のみ</b>。どれを採っても禁止目は出ません。
+      引き込みスベリは<b>後リールでの引き込み網羅が大きい順</b>（先頭＝最も取りこぼしにくい停止）。④で <b>「取りこぼし禁止」ON</b> にした小役の状態では<b>網羅最大の停止だけ</b>を返す（どれを採っても取りこぼさない・生成時に検証）。採用したスベリ <code>s</code> から
       <code>止める位置 = (押した位置 - s + リール長) % リール長</code>（上→下回転＝index 降順に滑る）、<code>基準段の図柄 = Reels[リール][止める位置]</code>。<br>
       （基準段は⑦のセレクタで上段／中段／下段を選択、<b>既定は上段</b>）<br><br>
 
@@ -504,6 +505,9 @@ function controlMasks(st,cfg){
     out[o.name]={seq:order,tierNames,s1,s2,s3};
   });
   ORDERS.forEach(o=>bandAlignByCoverage(out[o.name],cfg)); // §6-a1：align tier を後リールの引き込み網羅で並べ替え（ok[0]＝最も取りこぼしにくい停止）
+  // §6-a2：対象小役が「取りこぼし禁止（完全引き込み）」ONなら、ValidSlips は align の最上位バンドのみ返す（下位バンド＝網羅の落ちる停止を返さない）。
+  // マスク自体は不変＝合法性・lose・acceptable・袋小路検査に影響しない（出力層の絞り込みのみ）。
+  if(st.m>=0&&cfg.smallRoles[st.m]&&cfg.smallRoles[st.m].noMiss)ORDERS.forEach(o=>{out[o.name].noMiss=true;});
   return out;
 }
 const ALIGN_TIERS=['両立','重複専用','小役','ボーナス'],MISS_TIERS=['取りこぼし目','取りこぼし目狙い'],REACH_TIERS=['リーチ目','チャンス目'];
@@ -564,6 +568,38 @@ function deadEndsForState(st,M,cfg){
         for(let pc=0;pc<nc;pc++){if(!hit(L3,pc,nc))errs.push(`[袋小路] ${st.key} / ${o.name} 第3停止 ${RLET[a]}=${sa},${RLET[b]}=${sb},${RLET[c]}押し${pc}`);}}}
   });
   return errs;
+}
+// 取りこぼし禁止（完全引き込み）の検証（§6-a2）：ValidSlips が返す「align 最上位バンド」だけを採り続けたとき、
+// 全押し位置で必ず対象役を揃えられるか（＝返り値のどれを選んでも取りこぼさないか）を後ろ向き帰納で確認する。
+// 返り値の先頭 ok[0] だけでなく "全要素" が安全であることを要求する（ゲーム側がどれを採ってもよいのが ValidSlips の契約のため）。
+// 保証できない＝リール配置が「取りこぼし禁止」の宣言に追いつかない → generate はエラーにする（設計ミスの検出）。
+function noMissCheck(st,M,cfg){
+  const bad=[];
+  ORDERS.forEach(o=>{
+    const co=M[o.name],order=co.seq,a=order[0],b=order[1],c=order[2];
+    const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+    const alignIdx=co.tierNames.map((nm,i)=>ALIGN_TIERS.includes(nm)?i:-1).filter(i=>i>=0);
+    if(!alignIdx.length){bad.push(`${o.name} 引き込みtierが無い`);return;}
+    // その押し位置で ValidSlips（align）が返す停止＝最上位の非空 align tier に属する停止すべて
+    const topStops=(sit,push,n)=>{if(!sit)return[];
+      for(const i of alignIdx){const out=[];for(let s=0;s<=4;s++){const stop=((push-s)%n+n)%n;if((sit.tiers[i]>>stop)&1)out.push(stop);}if(out.length)return out;}
+      return[];};
+    const memo3=new Map(),memo2=new Map();
+    const ok3=(sa,sb)=>{const k=sa*100+sb;let v=memo3.get(k);if(v!==undefined)return v; // 第3停止＝align停止に届けば完成
+      const sit=co.s3[k];v=!!sit;
+      if(v)for(let pc=0;pc<nc;pc++)if(!topStops(sit,pc,nc).length){v=false;bad.push(`${o.name} 第3停止 ${RLET[a]}=${sa},${RLET[b]}=${sb},${RLET[c]}押し${pc}`);break;}
+      memo3.set(k,v);return v;};
+    const ok2=(sa)=>{let v=memo2.get(sa);if(v!==undefined)return v;
+      const sit=co.s2[sa];v=!!sit;
+      if(v)for(let pb=0;pb<nb;pb++){const S=topStops(sit,pb,nb);
+        if(!S.length){v=false;bad.push(`${o.name} 第2停止 ${RLET[a]}=${sa},${RLET[b]}押し${pb}`);break;}
+        if(S.some(sb=>!ok3(sa,sb))){v=false;break;}}                    // 詳細は ok3 が push 済み
+      memo2.set(sa,v);return v;};
+    for(let pa=0;pa<na;pa++){const S=topStops(co.s1,pa,na);
+      if(!S.length){bad.push(`${o.name} 第1停止 ${RLET[a]}押し${pa}`);continue;}
+      S.forEach(sa=>{ok2(sa);});}                                        // 詳細は ok2/ok3 が push 済み
+  });
+  return bad;
 }
 // 状態の到達盤面集合（legal マスクの直積）＝リーチ目/重複専用形 検証用
 function boardsFromMasks(M,cfg){
@@ -645,7 +681,11 @@ function generate(cfg){
   const states=enumStates(cfg);
   const control={},boards={};
   states.forEach(st=>{ const M=controlMasks(st,cfg); control[st.key]=M; boards[st.key]=boardsFromMasks(M,cfg);
-    deadEndsForState(st,M,cfg).forEach(e=>errors.push(e)); });
+    deadEndsForState(st,M,cfg).forEach(e=>errors.push(e));
+    // 取りこぼし禁止（完全引き込み）ONの小役：宣言どおり全押し位置で揃えられるかを検証（§6-a2）
+    const nmRole=(st.m>=0)?cfg.smallRoles[st.m]:null;
+    if(nmRole&&nmRole.noMiss){const bad=noMissCheck(st,M,cfg);
+      if(bad.length)errors.push(`[取りこぼし禁止] 小役「${nmRole.name}」は「取りこぼし禁止」ONですが、状態「${st.key}」ではリール配置上 全押し位置での引き込みを保証できません（${bad.length}件）。例: `+bad.slice(0,4).join(' / '));} });
   const hazBoards=boards['ハズレ']||new Set();
 
   // リーチ目検証（全状態の到達盤面で相互調査）
@@ -717,7 +757,8 @@ function generate(cfg){
     if(hasAlignTier)ORDERS.forEach(o=>{const h=M[o.name];const idxA=h.tierNames.map((nm,i)=>ALIGN_TIERS.includes(nm)?i:-1).filter(i=>i>=0);
       const anyA=sit=>idxA.some(i=>sit.tiers[i]);
       if(anyA(h.s1))alignable=true; Object.values(h.s2).forEach(sit=>{if(anyA(sit))alignable=true;}); Object.values(h.s3).forEach(sit=>{if(anyA(sit))alignable=true;});});
-    cov.push({key:st.key,hasAlignTier,alignable:hasAlignTier?alignable:true,boards:(boards[st.key]||new Set()).size});
+    cov.push({key:st.key,hasAlignTier,alignable:hasAlignTier?alignable:true,boards:(boards[st.key]||new Set()).size,
+      noMiss:!!(st.m>=0&&cfg.smallRoles[st.m]&&cfg.smallRoles[st.m].noMiss)}); // 取りこぼし禁止ON（検証を通っている＝全押し位置で引き込み保証）
     if(hasAlignTier&&!alignable)warnings.push(`[引き込み不可] 状態「${st.key}」は全押し位置で一度も役を揃えられません`);
   });
 
@@ -905,11 +946,13 @@ function renderSmall(){
     const mode=r.mode||'both';
     const modeSel=`<select onchange="setSmallMode(${i},this.value)" title="この小役が成立し得るモード（既定＝通常＋BIG中）。「BIG中のみ」は通常時に不可視（並んでもただのハズレ目）。「通常時のみ」はBIG中では見た目にも揃えない（蹴飛ばす＝禁止目）" style="background:var(--code);color:${mode==='both'?'var(--ink)':'#ffce7a'};border:1px solid ${mode==='both'?'var(--border)':'#5a4423'};border-radius:6px;padding:3px 6px;font-family:inherit;font-size:.76rem;">`+
       [['both','通常＋BIG中'],['normal','通常時のみ'],['big','BIG中のみ']].map(([v,l])=>`<option value="${v}" ${mode===v?'selected':''}>${l}</option>`).join('')+`</select>`;
+    const nom=!!r.noMiss;
     return `<div class="srow">`+
       `<input class="rolename" value="${escAttr(r.name)}" onfocus="smallNameOld=this.value" oninput="smallRolesData[${i}].name=this.value" onchange="renSmallName(${i},this.value)">`+
       [0,1,2].map(j=>`<span class="cyc" onclick="cellPaint('small',${i},${j})" oncontextmenu="event.preventDefault();cellClear('small',${i},${j})">${symChip(r.sym[j],28)}</span>`).join('')+
       (cnt[r.name]>1?`<span class="plabel" title="同名は同一フラグ＝いずれの揃い形でも成立扱い">同フラグ</span>`:'')+
       modeSel+
+      `<button class="sec tiny" onclick="toggleSmallNoMiss(${i})" title="ONで『取りこぼし禁止（完全引き込み）』：この役の成立時、ValidSlips は引き込み網羅が最大の停止（align 最上位バンド）だけを返す＝網羅の落ちる停止を候補から外す。リール配置が全押し位置での引き込みを保証できない場合は検証エラーになる（リプレイ等の完全引き込み役に使う）" style="${nom?'background:rgba(123,224,138,.22);color:#7be08a;border-color:#4e9a5b;':''}">取りこぼし禁止 ${nom?'ON':'OFF'}</button>`+
       `<button class="sec tiny" onclick="toggleSmallDup(${i})" title="ONで『重複時のみ揃う形』（リーチ目リプレイ等）。小役単独・ハズレでは出さない" style="${dup?'background:rgba(179,136,255,.25);color:#d6c7f5;border-color:#b388ff;':''}">重複専用 ${dup?'ON':'OFF'}</button>`+
       dupSel+
       `<button class="sec tiny" onclick="dupSmall(${i})" title="同名のまま複製＝別の揃い形を追加">複製</button>`+
@@ -919,9 +962,11 @@ function renderSmall(){
 function toggleSmallDup(i){const r=smallRolesData[i];r.dupOnly=!r.dupOnly;if(r.dupOnly&&!r.dupBonuses)r.dupBonuses=[];renderSmall();}
 // モードはフラグ（同名行）単位＝同名行をまとめて同期（同フラグの行ごとにモードが割れないように）
 function setSmallMode(i,v){const nm=smallRolesData[i].name;smallRolesData.forEach(r=>{if(r.name===nm)r.mode=v;});renderSmall();}
+// 取りこぼし禁止もフラグ（同名行）単位＝同名行をまとめて同期
+function toggleSmallNoMiss(i){const nm=smallRolesData[i].name,v=!smallRolesData[i].noMiss;smallRolesData.forEach(r=>{if(r.name===nm)r.noMiss=v;});renderSmall();}
 function toggleSmallDupBonus(i,bi,on){const name=bonusesData[bi].name;let arr=smallRolesData[i].dupBonuses?smallRolesData[i].dupBonuses.slice():[];if(on){if(!arr.includes(name))arr.push(name);}else arr=arr.filter(x=>x!==name);smallRolesData[i].dupBonuses=arr;renderSmall();}
-function addSmall(){smallRolesData.push({name:'新役',sym:['*','*','*'],mode:'both',dupOnly:false,dupBonuses:[]});renderSmall();renderMiss();}
-function dupSmall(i){const r=smallRolesData[i];smallRolesData.splice(i+1,0,{name:r.name,sym:r.sym.slice(),mode:r.mode||'both',dupOnly:!!r.dupOnly,dupBonuses:(r.dupBonuses||[]).slice()});renderSmall();renderMiss();} // 同名のまま複製＝別の揃い形を追加
+function addSmall(){smallRolesData.push({name:'新役',sym:['*','*','*'],mode:'both',noMiss:false,dupOnly:false,dupBonuses:[]});renderSmall();renderMiss();}
+function dupSmall(i){const r=smallRolesData[i];smallRolesData.splice(i+1,0,{name:r.name,sym:r.sym.slice(),mode:r.mode||'both',noMiss:!!r.noMiss,dupOnly:!!r.dupOnly,dupBonuses:(r.dupBonuses||[]).slice()});renderSmall();renderMiss();} // 同名のまま複製＝別の揃い形を追加
 let smallNameOld=''; // 小役名入力欄の編集開始時の名前（onfocusで記録）。取りこぼし目の対象参照の付け替え用。
 // 入力中(oninput)は再描画せず名前だけ更新＝フォーカス維持。確定(onchange)で取りこぼし目の対象小役参照を付け替えて再描画。
 function renSmallName(i,v){const old=smallNameOld;smallRolesData[i].name=v;smallNameOld=v;
@@ -1072,9 +1117,9 @@ function groupRolesByName(list){const order=[],map=new Map();
   list.forEach(r=>{if(!map.has(r.name)){map.set(r.name,{name:r.name,forms:[]});order.push(r.name);}map.get(r.name).forms.push(r.sym.slice());});
   return order.map(n=>map.get(n));}
 // 小役：同名集約＋各フォームに scope（dupOnly＝重複専用／dupTargets＝対象ボーナスidx）を保持。
-// フラグのモード（normal/big/both）は先頭行から（GUIは同名行を同期）。
+// フラグのモード（normal/big/both）と取りこぼし禁止（noMiss）は先頭行から（GUIは同名行を同期）。
 function groupSmallRoles(list,bonuses){const order=[],map=new Map();
-  list.forEach(r=>{if(!map.has(r.name)){map.set(r.name,{name:r.name,mode:r.mode||'both',forms:[]});order.push(r.name);}
+  list.forEach(r=>{if(!map.has(r.name)){map.set(r.name,{name:r.name,mode:r.mode||'both',noMiss:!!r.noMiss,forms:[]});order.push(r.name);}
     const dupTargets=(r.dupOnly&&r.dupBonuses&&r.dupBonuses.length)
       ?[...new Set(r.dupBonuses.map(n=>bonuses.findIndex(b=>b.name===n)).filter(i=>i>=0))]
       :(r.dupOnly?bonuses.map((b,i)=>i):[]); // 重複専用で対象未指定＝全ボーナス対象
@@ -1129,8 +1174,8 @@ function runCore(){
   res.reReport.forEach((r,i)=>{const cnt=(res.reBoards[i]||[]).length;pv+=`<details class="prevd" ontoggle="if(this.open)fillPreview(${i})"><summary><span style="color:var(--accent2);font-family:Consolas,monospace;">[${escapeHtml(r.uid)}]</span> ${escapeHtml(r.name)}（対象:${escapeHtml(r.bonus)}・${r.kakutei}${r.chance?'・チャンス目':''}・実出目 ${cnt}例）</summary><div id="prev_${i}" class="mbwrap"><small>クリックで展開</small></div></details>`;});
   h+=`<div class="card full"><h2>実出目プレビュー（${res.reReport.length}リーチ目・クリックで展開）</h2><small>条件セルは枠で強調／不問マスは実リール図柄で自動充填。1確は「全件表示」で全パターン展開できます。</small><div style="max-height:620px;overflow-y:auto;padding-right:4px;margin-top:6px;">${pv}</div></div>`;
   // 状態別 制御の検証（引き込み/取りこぼし網羅）
-  h+=`<div class="card full"><h2>状態別 制御の検証（引き込み/取りこぼし網羅）</h2><small>「揃え可能」＝その状態で役を引き込める押し位置が1つ以上ある。不可＝全押し位置で取りこぼし。</small><table><tr><th>状態</th><th>引き込みtier</th><th>揃え可能</th><th>到達出目数</th></tr>`;
-  (res.coverage||[]).forEach(c=>{h+=`<tr><td>${escapeHtml(c.key)}</td><td>${c.hasAlignTier?'あり':'<span style="color:var(--muted)">—</span>'}</td><td>${!c.hasAlignTier?'<span style="color:var(--muted)">—</span>':(c.alignable?'✔':'<span style="color:#ff5c6c">不可</span>')}</td><td>${c.boards}</td></tr>`;});
+  h+=`<div class="card full"><h2>状態別 制御の検証（引き込み/取りこぼし網羅）</h2><small>「揃え可能」＝その状態で役を引き込める押し位置が1つ以上ある。不可＝全押し位置で取りこぼし。「取りこぼし禁止」＝ONの小役は全押し位置で引き込みを保証（検証済み）し、ValidSlips は網羅最大の停止のみ返す。</small><table><tr><th>状態</th><th>引き込みtier</th><th>揃え可能</th><th>取りこぼし禁止</th><th>到達出目数</th></tr>`;
+  (res.coverage||[]).forEach(c=>{h+=`<tr><td>${escapeHtml(c.key)}</td><td>${c.hasAlignTier?'あり':'<span style="color:var(--muted)">—</span>'}</td><td>${!c.hasAlignTier?'<span style="color:var(--muted)">—</span>':(c.alignable?'✔':'<span style="color:#ff5c6c">不可</span>')}</td><td>${c.noMiss?'<span style="color:#7be08a">ON（保証✔）</span>':'<span style="color:var(--muted)">—</span>'}</td><td>${c.boards}</td></tr>`;});
   h+=`</table></div>`;
   h+=`<div class="card full"><h2>定義リーチ目の検証</h2><table><tr><th>ID</th><th>名前</th><th>対象</th><th>確定段階</th><th>制約リール数</th><th>対象で出る</th><th>純ハズレで出る</th><th>チャンス目</th><th>種別</th></tr>`;
   res.reReport.forEach(r=>{const kcls=r.haz?'khaz':('k'+(r.span||1));h+=`<tr><td style="color:var(--accent2);font-family:Consolas,monospace;">[${escapeHtml(r.uid)}]</td><td>${escapeHtml(r.name)}</td><td>${escapeHtml(r.bonus)}</td><td><span class="tag ${kcls}">${escapeHtml(r.kakutei)}</span></td><td>${r.span}</td><td>${r.byBonus?'✔':'<span style="color:#ff5c6c">✘</span>'}</td><td>${r.byHazure?'<span style="color:#ff5c6c">出る(NG)</span>':'出ない✔'}</td><td>${r.chance?(r.inSmallMiss?'<span style="color:#7be08a">機能✔</span>':'<span style="color:#ffce7a">出せない</span>'):'<span style="color:var(--muted)">—</span>'}</td><td>${r.misWin?'<span style="color:#7be08a">小役揃い型</span>':'<span style="color:var(--muted)">通常</span>'}</td></tr>`;});
@@ -1186,9 +1231,10 @@ function tBump(r,d){const n=lastCfg.reels[r].length;tPush[r]=((tPush[r]+d)%n+n)%
 function tValidSlips(co,step,prior,push){const reel=co.seq[step-1],n=lastCfg.reels[reel].length;
   const sit=step===1?co.s1:step===2?(co.s2[prior[0]]):(co.s3[prior[0]*100+prior[1]]);if(!sit)return{slips:[],sit:null};
   const pri=[0,1,2,3,4],ALIGN=['両立','重複専用','小役','ボーナス'],MISS=['取りこぼし目'],MISS_AIM=['取りこぼし目狙い'],REACH=['リーチ目','チャンス目'];
-  const grab=(names)=>{const out=[];for(let i=0;i<sit.tiers.length;i++){if(names&&!names.includes(co.tierNames[i]))continue;const t=sit.tiers[i];for(const s of pri){const stop=((push-s)%n+n)%n;if((t>>stop)&1)out.push(s);}}return out;};
+  // topOnly＝取りこぼし禁止（§6-a2）：最上位の非空 align tier（＝網羅最大バンド）で打ち切る
+  const grab=(names,topOnly)=>{const out=[];for(let i=0;i<sit.tiers.length;i++){if(names&&!names.includes(co.tierNames[i]))continue;const t=sit.tiers[i];const before=out.length;for(const s of pri){const stop=((push-s)%n+n)%n;if((t>>stop)&1)out.push(s);}if(topOnly&&out.length>before)break;}return out;};
   const grabLose=()=>{const out=[];for(const s of pri){const stop=((push-s)%n+n)%n;if((sit.lose>>stop)&1)out.push(s);}return out;};
-  let slips=grab(ALIGN);if(!slips.length)slips=grab(MISS);if(!slips.length)slips=grab(MISS_AIM);if(!slips.length)slips=grab(REACH);if(!slips.length)slips=grabLose();
+  let slips=grab(ALIGN,!!co.noMiss);if(!slips.length)slips=grab(MISS);if(!slips.length)slips=grab(MISS_AIM);if(!slips.length)slips=grab(REACH);if(!slips.length)slips=grabLose();
   return{slips,sit};}
 function tClassOfStop(co,sit,stop){for(let i=0;i<sit.tiers.length;i++)if((sit.tiers[i]>>stop)&1)return co.tierNames[i];if((sit.lose>>stop)&1)return '通常目';return '不可';}
 // 種別の表記：ボーナス単独の「リーチ目」tierはリーチ目と取りこぼし目を同順位で合成しているため、
@@ -1245,7 +1291,8 @@ function runTester(){
   h+=`<tr><th style="text-align:left;">停止</th>${cols.map(r=>td(r,c=>c.stop)).join('')}</tr>`;
   h+=`<tr><th style="text-align:left;">種別</th>${cols.map(r=>td(r,c=>`<span style="color:${tClassColor(c.cls)}">${escapeHtml(c.cls)}</span>`)).join('')}</tr>`;
   h+=`</table></div>`;
-  h+=`<small>合法スベリは優先順（先頭が最優先採用）・チップをクリックで採用変更（その停止以降を再計算）。色：緑=役の引き込み／桃=取りこぼし目（確定）／薄桃=取りこぼし目狙い／黄=リーチ目・チャンス目／灰=通常目。返るのは達成可能な最上位グループのみ（確定があれば確定のみ）。</small>`;
+  h+=`<small>合法スベリは優先順（先頭が最優先採用）・チップをクリックで採用変更（その停止以降を再計算）。色：緑=役の引き込み／桃=取りこぼし目（確定）／薄桃=取りこぼし目狙い／黄=リーチ目・チャンス目／灰=通常目。返るのは達成可能な最上位グループのみ（確定があれば確定のみ）。`
+    +(co.noMiss?`<br><span style="color:#7be08a;">【取りこぼし禁止 ON】</span>この状態の引き込みスベリは<b>網羅最大の停止のみ</b>（下位バンドは返しません）＝どれを採っても取りこぼしません。`:'')+`</small>`;
   // 停止形プレビュー：合法スベリコマの全組合せ（最大5×5×5=125）を一覧。
   // 並び＝第1停止スベリ s0 ごと → 第2停止スベリ s1 ごとに1行、その行に第3停止スベリ s2 の全通りを横並び（s1全通り後に s0 を進める）。
   // 各停止形の上段に、停止番号の上へ各リールのスベリコマ数字（種別色）を表示。採用＝アウトライン、クリックでその組合せを採用。
@@ -1315,7 +1362,7 @@ function saveProject(){
 }
 function loadProject(inp){const f=inp.files&&inp.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{const p=JSON.parse(e.target.result);
   symbols=p.symbols||symbols;symImages=p.symImages||{};reels=p.reels||reels;bonusesData=p.bonuses||[];smallRolesData=p.smallRoles||[];reachEyesData=p.reachEyes||[];missEyesData=p.missEyes||[];
-  smallRolesData.forEach(r=>{if(r.dupOnly===undefined)r.dupOnly=false;if(!r.dupBonuses)r.dupBonuses=[];if(!r.mode)r.mode='both';}); // 旧データ：重複専用OFF・モード=通常＋BIG中（既定）
+  smallRolesData.forEach(r=>{if(r.dupOnly===undefined)r.dupOnly=false;if(!r.dupBonuses)r.dupBonuses=[];if(!r.mode)r.mode='both';if(r.noMiss===undefined)r.noMiss=false;}); // 旧データ：重複専用OFF・モード=通常＋BIG中・取りこぼし禁止OFF（既定）
   reachEyesData.forEach(re=>{if(re.bonus!==undefined){if(!re.bonuses)re.bonuses=re.bonus?[re.bonus]:[];delete re.bonus;}if(!re.bonuses)re.bonuses=[];if(re.chance===undefined)re.chance=false;if(re.disabled===undefined)re.disabled=false; // 旧データ：チャンス目可既定OFF・無効既定OFF
     if(!re.grid)re.grid=newGrid();else if(re.grid.length===3)re.grid=[[null,null,null],re.grid[0],re.grid[1],re.grid[2],[null,null,null]];}); // 旧単一対象→配列／旧3段グリッド→5段（枠上/枠下を空で追加）へ移行
   missEyesData.forEach(me=>{if(me.small===undefined)me.small='';if(me.collapsed===undefined)me.collapsed=false;if(me.disabled===undefined)me.disabled=false;
@@ -1357,6 +1404,9 @@ function csHeader(){
 //    ★ 出し分け：CanAlign / AlignSlips / MissSlips / ReachSlips / LoseSlips(state, order, step, prior, push)。
 //      MissSlips=取りこぼし目(確定＝どう止めても出る)／MissAimSlips=取りこぼし目狙い(後リール次第)。ValidSlips は Align→Miss(確定)→MissAim(狙い)→Reach→Lose の順で達成可能な最上位グループのみ返す。
 //      例「揃えられるなら揃える、無理ならあえてリーチ目」→ var a=AlignSlips(...); var s = a.Length>0 ? a[0] : ReachSlips(...)[0];
+//    ★ 引き込み（Align）の並び：同じ align tier でも「後リールでの引き込み網羅(coverage)が大きい停止」が先（ok[0]＝最も取りこぼしにくい停止）。
+//      対象小役が「取りこぼし禁止」ONの状態（Control[state][order].NoMiss==true）では、AlignSlips/ValidSlips は
+//      最上位バンド（網羅最大の停止）だけを返す＝どれを採っても取りこぼさない（生成時に全押し位置で検証済み）。
 //    ★ slipPriority（任意・末尾引数）= 0〜4 の並べ替え。同じ優先tier内のタイブレークに使用。省略時 {0,1,2,3,4}。
 //    ★ prior = これまでに止めた停止位置（基準段 index）を押した順に並べた配列（1本目は new int[0]）。
 //    ★ pN    = ボタンを押した瞬間に「${rn}」にあった図柄の index(0始まり)。
@@ -1373,13 +1423,13 @@ function csSit(sit){return 'new Situation{Tiers=new int[]{'+sit.tiers.join(',')+
 function csCtrlOrder(h){
   const s2=Object.keys(h.s2).map(k=>'{'+k+','+csSit(h.s2[k])+'}');
   const s3=Object.keys(h.s3).map(k=>'{'+k+','+csSit(h.s3[k])+'}');
-  return 'new CtrlOrder{Seq=new int[]{'+h.seq.join(',')+'},TierNames=new string[]{'+h.tierNames.map(x=>JSON.stringify(x)).join(',')+'},S1='+csSit(h.s1)+',\n        S2=new Dictionary<int,Situation>{'+csChunk(s2)+'},\n        S3=new Dictionary<int,Situation>{'+csChunk(s3)+'}}';
+  return 'new CtrlOrder{Seq=new int[]{'+h.seq.join(',')+'},TierNames=new string[]{'+h.tierNames.map(x=>JSON.stringify(x)).join(',')+'}'+(h.noMiss?',NoMiss=true':'')+',S1='+csSit(h.s1)+',\n        S2=new Dictionary<int,Situation>{'+csChunk(s2)+'},\n        S3=new Dictionary<int,Situation>{'+csChunk(s3)+'}}';
 }
 function toCSharp(json,cfg){
   const q=s=>JSON.stringify(s),rl=json.meta.reels;
   let o=csHeader()+'using System.Collections.Generic;\nusing System.Linq;\n\npublic static class ReelStopValidator {\n';
   o+='  public class Situation { public int[] Tiers; public int Lose; }          // Tiers[i]=優先tier i の合法停止マスク, Lose=通常目マスク\n';
-  o+='  public class CtrlOrder { public int[] Seq; public string[] TierNames; public Situation S1; public Dictionary<int,Situation> S2; public Dictionary<int,Situation> S3; }\n';
+  o+='  public class CtrlOrder { public int[] Seq; public string[] TierNames; public bool NoMiss; public Situation S1; public Dictionary<int,Situation> S2; public Dictionary<int,Situation> S3; } // NoMiss=対象小役が「取りこぼし禁止」＝AlignSlips は最上位バンドのみ返す\n';
   o+='  public class HazOrder { public int[] Seq; public int S1; public Dictionary<int,int> S2; public Dictionary<int,int> S3; } // 互換\n\n';
   o+='  public static readonly string[] ReelL = { '+rl.L.map(q).join(', ')+' };\n';
   o+='  public static readonly string[] ReelC = { '+rl.C.map(q).join(', ')+' };\n';
@@ -1426,12 +1476,14 @@ function toCSharp(json,cfg){
   o+='  }\n';
   o+='  public static int[] ValidSlips(string state, string order, int step, int[] prior, int push) { return ValidSlips(state, order, step, prior, push, DefaultSlipPriority); }\n\n';
   o+='  // クラス別取得：名前述語に合致する tier（＋必要なら lose）の合法スベリのみ。\n';
-  o+='  static int[] SlipsByTier(string state, string order, int step, int[] prior, int push, int[] slipPriority, System.Func<string,bool> tierOk) {\n';
+  o+='  // topTierOnly=true（取りこぼし禁止）なら、最初にスベリが得られた tier で打ち切る＝align の最上位バンド（引き込み網羅が最大の停止）のみ返す。\n';
+  o+='  static int[] SlipsByTier(string state, string order, int step, int[] prior, int push, int[] slipPriority, System.Func<string,bool> tierOk, bool topTierOnly) {\n';
   o+='    var co = Control[state][order]; int n = Reels[co.Seq[step-1]].Length; var sit = SituationOf(state,order,step,prior); var outp = new List<int>();\n';
-  o+='    for (int t = 0; t < sit.Tiers.Length; t++) { if (!tierOk(co.TierNames[t])) continue; int mask = sit.Tiers[t]; foreach (int s in slipPriority) { int stop = ((push - s) % n + n) % n; if (((mask >> stop) & 1) != 0) outp.Add(s); } }\n';
+  o+='    for (int t = 0; t < sit.Tiers.Length; t++) { if (!tierOk(co.TierNames[t])) continue; int mask = sit.Tiers[t]; int before = outp.Count; foreach (int s in slipPriority) { int stop = ((push - s) % n + n) % n; if (((mask >> stop) & 1) != 0) outp.Add(s); } if (topTierOnly && outp.Count > before) break; }\n';
   o+='    return outp.ToArray();\n';
   o+='  }\n';
-  o+='  public static int[] AlignSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, AlignTierNames.Contains); }\n';
+  o+='  static int[] SlipsByTier(string state, string order, int step, int[] prior, int push, int[] slipPriority, System.Func<string,bool> tierOk) { return SlipsByTier(state,order,step,prior,push,slipPriority,tierOk,false); }\n';
+  o+='  public static int[] AlignSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, AlignTierNames.Contains, Control[state][order].NoMiss); }\n';
   o+='  public static int[] AlignSlips(string state, string order, int step, int[] prior, int push) { return AlignSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
   o+='  public static int[] MissSlips(string state, string order, int step, int[] prior, int push, int[] slipPriority) { return SlipsByTier(state,order,step,prior,push,slipPriority, MissTierNames.Contains); }\n';
   o+='  public static int[] MissSlips(string state, string order, int step, int[] prior, int push) { return MissSlips(state,order,step,prior,push,DefaultSlipPriority); }\n';
