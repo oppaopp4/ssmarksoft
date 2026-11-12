@@ -12,6 +12,8 @@
   header{background:radial-gradient(1000px 320px at 50% -80px,rgba(179,136,255,.16),transparent),linear-gradient(160deg,#16202e,#0f1722);border-bottom:1px solid var(--border);padding:26px 18px 20px;text-align:center;}
   header h1{font-size:1.5rem;margin:0 0 6px;background:linear-gradient(90deg,#d6b3ff,#7fd4ff);-webkit-background-clip:text;background-clip:text;color:transparent;}
   header p{color:var(--muted);margin:0;font-size:.86rem;}
+  /* バージョン表記（タイトル横のピル）。h1 のグラデ文字(background-clip:text)を打ち消して通常文字で描く */
+  header h1 .ver{display:inline-block;margin-left:10px;padding:1px 9px;font-size:.72rem;font-weight:normal;line-height:1.5;vertical-align:middle;color:var(--muted);-webkit-text-fill-color:var(--muted);background:var(--panel2);-webkit-background-clip:border-box;background-clip:border-box;border:1px solid var(--border);border-radius:999px;font-family:"Consolas",monospace;letter-spacing:.02em;}
   h2{font-size:1rem;color:var(--accent2);margin:0 0 10px;padding-left:9px;border-left:4px solid var(--accent2);}
   .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;}
   .full{grid-column:1/-1;}
@@ -143,7 +145,8 @@
 </head>
 <body>
 <header>
-  <h1>全状態 リール制御 ＆ バリデータ生成</h1>
+  <!-- バージョン表記：このファイルを更新したら必ず上げる（機能追加＝minor／修正＝patch、日付は更新日）。公開サイトとの一致確認にも使う -->
+  <h1>全状態 リール制御 ＆ バリデータ生成<span class="ver" id="appVersion" title="ツールのバージョン（更新日）">v1.0.0 (2026-11-12)</span></h1>
   <p>ハズレ／小役／ボーナス／<b>重複（小役優先）</b>の全フラグ状態で、<b>合法スベリを引き込み優先順（役を揃える→取りこぼし目→リーチ目/チャンス目→通常目）で返す</b>制御を生成・網羅検証。成果物は JSON / C#（<code>ValidSlips(state,…)</code>）。<b>何コマ滑らせるか（採用）はゲーム側が決めます。</b></p>
 </header>
 <div class="wrap">
