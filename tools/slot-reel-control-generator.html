@@ -86,6 +86,31 @@
   .busybar{height:8px;margin-top:14px;border-radius:4px;background:var(--code);overflow:hidden;position:relative;}
   .busybar i{position:absolute;top:0;left:0;width:38%;height:100%;border-radius:4px;background:linear-gradient(90deg,var(--accent2),var(--accent));will-change:transform;animation:busyslide 1.1s linear infinite;}
   @keyframes busyslide{from{transform:translateX(-110%);}to{transform:translateX(380%);}}
+  /* 全出目一覧（オーバーレイ）。種別ごとに枠色・背景・強調セル色を変える */
+  #boardsOverlay{position:fixed;inset:0;background:rgba(11,15,21,.78);display:none;justify-content:center;align-items:flex-start;z-index:80;padding:16px;}
+  #boardsOverlay.on{display:flex;}
+  .bovbox{background:var(--panel);border:1px solid var(--border);border-radius:12px;width:100%;max-width:1500px;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 10px 36px rgba(0,0,0,.55);}
+  .bovhead{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+  .bovhead h2{margin:0;cursor:default;}
+  .bovhead h2::before{content:'';}
+  .bovctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 16px;border-bottom:1px solid var(--border);font-size:.8rem;}
+  .bovctl select{background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-family:inherit;}
+  .kchip{cursor:pointer;border:1px solid var(--border);border-radius:14px;padding:3px 10px;font-size:.76rem;background:var(--panel2);color:var(--ink);user-select:none;}
+  .kchip.on{border-color:var(--accent);background:rgba(255,176,46,.16);}
+  .bovlist{overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:8px;padding:12px 16px;}
+  .bcard{border:2px solid var(--border);border-radius:9px;padding:6px 7px;background:var(--panel2);font-size:.72rem;line-height:1.45;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .bcard .bchead{display:flex;justify-content:space-between;align-items:center;width:100%;gap:4px;}
+  .bcard .bno{color:var(--muted);font-family:Consolas,monospace;font-size:.66rem;}
+  .bcard .bmemo{width:100%;color:var(--ink);word-break:break-all;}
+  .bcard .bsig{width:100%;color:var(--muted);word-break:break-all;}
+  .bcard .ktag{font-size:.7rem;padding:0 7px;border-radius:5px;font-weight:bold;}
+  .bcard.kn{opacity:.82;} .bcard.kn .ktag{background:rgba(159,176,195,.15);color:var(--muted);}
+  .bcard.kr{border-color:#ff5c6c;background:rgba(255,92,108,.12);} .bcard.kr .ktag{background:#ff5c6c;color:#1a0f12;} .bcard.kr .mbc.on{outline-color:#ff5c6c;}
+  .bcard.kc{border-color:#ffb02e;background:rgba(255,176,46,.12);} .bcard.kc .ktag{background:#ffb02e;color:#1f1505;} .bcard.kc .mbc.on{outline-color:#ffb02e;}
+  .bcard.km{border-color:#ffa0c0;background:rgba(255,160,192,.10);} .bcard.km .ktag{background:#ffa0c0;color:#2a0f18;} .bcard.km .mbc.on{outline-color:#ffa0c0;}
+  .bcard.ks{border-color:#4e9a5b;background:rgba(123,224,138,.08);} .bcard.ks .ktag{background:#7be08a;color:#0d2010;} .bcard.ks .mbc.on{outline-color:#7be08a;}
+  .bcard.kb{border-color:#b388ff;background:rgba(179,136,255,.14);} .bcard.kb .ktag{background:#b388ff;color:#1a0f33;} .bcard.kb .mbc.on{outline-color:#b388ff;}
+  .bovfoot{display:flex;align-items:center;gap:8px;padding:8px 16px;border-top:1px solid var(--border);font-size:.8rem;flex-wrap:wrap;}
   .recard.redisabled .rolename{text-decoration:line-through;color:var(--muted);}
   .recard.redisabled table.regrid,.recard.redisabled .dimwrap{opacity:.45;filter:grayscale(.7);}
   .tag.dis{background:rgba(255,92,108,.18);color:#ff9aa6;border:1px dashed var(--red);}
@@ -202,6 +227,8 @@
         <div><button id="btnGen">▶ 検証＆制御生成</button></div>
         <div><button class="sec" id="btnDl" disabled>⬇ 制御JSON</button></div>
         <div><button class="sec" id="btnCs" disabled>⬇ C#(ReelStopValidator.cs)</button></div>
+        <div><button class="sec" id="btnEye" disabled title="全フラグ別のリーチ目・チャンス目・取りこぼし目の実出目と、AIに渡せる日本語の解説（データの規則・ゲームでの使い方）を1つのJSONで保存（検証成功時のみ）">⬇ リーチ目/取りこぼし目データ(AI解説付き)</button></div>
+        <div><button class="sec" id="btnBoards" disabled title="到達しうる全出目を順番に表示（通常目・リーチ目・チャンス目・取りこぼし目・小役・ボーナスを色分け＋一言メモ）">👁 全出目一覧</button></div>
       </div>
       <details style="margin-top:10px;"><summary style="cursor:pointer;color:var(--accent2);font-size:.82rem;">▸ C#(ReelStopValidator.cs)の使い方</summary>
       <div style="font-size:.8rem;color:var(--muted);margin-top:6px;line-height:1.8;">
@@ -261,6 +288,18 @@
   <div id="result"></div>
 
   <!-- 検証＆制御生成中の進捗表示（run() が表示→1フレーム描画→重い同期処理→非表示） -->
+  <div id="boardsOverlay" onclick="if(event.target===this)closeBoardList()"><div class="bovbox">
+    <div class="bovhead"><h2>全出目一覧</h2><small id="bovSummary"></small><span style="flex:1"></span><button class="sec tiny" onclick="closeBoardList()" title="閉じる（Esc）">✕ 閉じる</button></div>
+    <div class="bovctl">
+      <span>モード</span><select id="bovMode" onchange="bovPage=0;renderBoardList()"></select>
+      <span>基準</span><select id="bovBasis" onchange="bovPage=0;renderBoardList()" title="制御で出る＝ValidSlips の返り値（優先順位どおり）を採用した場合に出る出目／止まりうる＝禁止目と袋小路を回避できる停止すべて（優先順位で絞る前の上限）"><option value="ctl" selected>制御で出る（優先順位どおり）</option><option value="legal">止まりうる（合法停止すべて）</option></select>
+      <span>フラグ</span><select id="bovFlag" onchange="bovPage=0;renderBoardList()" title="選んだフラグ（状態）で出る出目だけに絞り込み"></select>
+      <span style="margin-left:6px;">種別</span><span id="bovKinds" style="display:flex;gap:5px;flex-wrap:wrap;"></span>
+    </div>
+    <div class="bovctl" style="color:var(--muted);">並び順＝上段の図柄番号 L→C→R の昇順。枠で囲んだマス＝その出目を成す条件セル／入賞ライン。メモ1行目＝出目の種類、2行目＝その出目が出るフラグから読める意味（ハズレでも出る／ボーナス確定／ボーナスor小役取りこぼし 等）。「基準」＝制御で出る：ValidSlips の返り値（優先順位どおり）を採用した場合に出る出目／止まりうる：禁止目と袋小路を回避できる停止すべて（優先順位で絞る前の上限）。カードにカーソルを合わせると両基準の出現フラグ一覧。</div>
+    <div id="bovList" class="bovlist"></div>
+    <div class="bovfoot" id="bovPager"></div>
+  </div></div>
   <div id="busyOverlay"><div class="busybox"><b>検証＆制御生成中…</b><div class="plabel" style="margin-top:6px;">全状態の制御マスク生成と相互検査を実行しています（構成により数秒かかります）</div><div class="busybar"><i></i></div></div></div>
 </div>
 <button id="dockToggle" class="docktoggle" onclick="toggleDock()" title="リール配列を右側に固定表示（作業中も見比べられる）">◧ リール参照</button>
@@ -612,6 +651,22 @@ function boardsFromMasks(M,cfg){
         for(let sc=0;sc<nc;sc++){if(!((L3>>sc)&1))continue;const stt=[];stt[a]=sa;stt[b]=sb;stt[c]=sc;set.add(stt[0]+'_'+stt[1]+'_'+stt[2]);}}}});
   return set;
 }
+// ValidSlips の返り値（達成可能な最上位グループのみ：ALIGN→MISS(確定)→MISS_AIM(狙い)→REACH→LOSE）。
+// co.noMiss（取りこぼし禁止）は align 最上位の非空 tier で打ち切る（§6-a2）。pri＝スベリ優先（同tier内の並び）。
+function topSlips(co,sit,push,n,pri){pri=pri||[0,1,2,3,4];
+  const grab=(names,topOnly)=>{const out=[];for(let i=0;i<sit.tiers.length;i++){if(!names.includes(co.tierNames[i]))continue;const t=sit.tiers[i];const before=out.length;for(const s of pri){const stop=((push-s)%n+n)%n;if((t>>stop)&1)out.push(s);}if(topOnly&&out.length>before)break;}return out;};
+  let r=grab(ALIGN_TIERS,!!co.noMiss);if(!r.length)r=grab(['取りこぼし目']);if(!r.length)r=grab(['取りこぼし目狙い']);if(!r.length)r=grab(REACH_TIERS);
+  if(!r.length)for(const s of pri){const stop=((push-s)%n+n)%n;if((sit.lose>>stop)&1)r.push(s);}
+  return r;}
+// 状態の「制御で出うる盤面」集合：全押し順×全押し位置で、ValidSlips の返り値のどれかを採用した場合に止まりうる盤面。
+// boardsFromMasks（合法停止の直積＝止まりうる上限）の部分集合。優先順位（引き込み→取りこぼし目→リーチ目→通常目）を反映した実出目。
+function boardsFromValidSlips(M,cfg){
+  const set=new Set();
+  ORDERS.forEach(o=>{const co=M[o.name],[a,b,c]=co.seq;const na=cfg.reels[a].length,nb=cfg.reels[b].length,nc=cfg.reels[c].length;
+    const reach=(sit,n)=>{const S=new Set();if(!sit)return S;for(let p=0;p<n;p++)topSlips(co,sit,p,n).forEach(s=>S.add(((p-s)%n+n)%n));return S;};
+    reach(co.s1,na).forEach(sa=>reach(co.s2[sa],nb).forEach(sb=>reach(co.s3[sa*100+sb],nc).forEach(sc=>{const st=[];st[a]=sa;st[b]=sb;st[c]=sc;set.add(st[0]+'_'+st[1]+'_'+st[2]);})));});
+  return set;
+}
 // ハズレ互換 validator（legal マスクを s1/s2/s3 の int で）
 function hazValidatorFromControl(M){
   const v={};ORDERS.forEach(o=>{const h=M[o.name];const s2={},s3={};
@@ -674,6 +729,81 @@ function reachEyeTrapScan(cfg){
   });
   return out;
 }
+// ── 全出目の分類（⑦「全出目一覧」と「リーチ目/取りこぼし目データ出力」の共通土台） ──
+// mode('normal'|'big') の全状態の到達盤面（boardsFromMasks）を和集合し、各盤面を
+//   ボーナス整列 ＞ リーチ目（チャンス目可OFF）＞ チャンス目（可ON）＞ 小役入賞 ＞ 取りこぼし目 ＞ 通常目
+// の優先で1種別に分類し、出現フラグ（その盤面が到達しうる状態キー）を付ける。
+// 判定規則は tOutcome／検証レポートと同一：matchEye＝小役整列で打ち消し（小役揃い型を除く・§5.4）／
+// matchMissEye＝対象小役が非整列（§5.2）／BIG中はリーチ目を参照しない（§5.3）／モード外の小役は不可視。
+const BOARD_KINDS=['通常目','リーチ目','チャンス目','取りこぼし目','小役','ボーナス'];
+// ctlBoards（省略可）＝状態別の boardsFromValidSlips。与えると各盤面に flagsCtl/signalCtl（ValidSlips の返り値を採用した場合に出うるフラグ）も付ける。
+// flags（合法＝禁止目と袋小路を回避できる停止で止まりうる上限）⊇ flagsCtl（優先順位どおりに制御した実出目）。
+function classifyBoards(cfg,states,boards,mode,ctlBoards){
+  const big=mode==='big',sts=states.filter(s=>!!s.big===big);
+  const U=new Map(); // 盤面キー → 出現フラグ（状態キー）配列
+  sts.forEach(s=>{(boards[s.key]||new Set()).forEach(k=>{let a=U.get(k);if(!a)U.set(k,a=[]);a.push(s.key);});});
+  const out=[];
+  U.forEach((flags,k)=>{const stops=keyToStops(k);const bonus=[],small=[],reach=[],chance=[],miss=[];
+    cfg.bonuses.forEach((b,i)=>{if(alignsBonus(stops,cfg,i))bonus.push(i);});
+    cfg.smallRoles.forEach((r,j)=>{if(roleInMode(r,mode)&&smallRoleAligns(j,stops,cfg))small.push(j);});
+    if(!bonus.length){ // ボーナス揃いは整列であって目ではない（reachEyeInstances と同じく除外）
+    if(!big)cfg.reachEyes.forEach((re,i)=>{if(matchEye(re,stops,cfg))(re.chance?chance:reach).push(i);});
+    (cfg.missEyes||[]).forEach((me,i)=>{const r=cfg.smallRoles[me.target];if(r&&roleInMode(r,mode)&&matchMissEye(me,stops,cfg,mode))miss.push(i);});}
+    const kind=bonus.length?'ボーナス':reach.length?'リーチ目':chance.length?'チャンス目':small.length?'小役':miss.length?'取りこぼし目':'通常目';
+    const e={key:k,stops,flags,bonus,small,reach,chance,miss,kind,signal:boardSignal(flags,sts)};
+    if(ctlBoards){e.flagsCtl=flags.filter(f=>ctlBoards[f]&&ctlBoards[f].has(k));e.signalCtl=boardSignal(e.flagsCtl,sts);}
+    out.push(e);});
+  // 並び順＝上段の図柄番号（miniBoard の表示番号）L→C→R の昇順
+  const top=(s,r)=>{const n=cfg.reels[r].length;return ((s-REF)%n+n)%n;};
+  out.sort((x,y)=>top(x.stops[0],0)-top(y.stops[0],0)||top(x.stops[1],1)-top(y.stops[1],1)||top(x.stops[2],2)-top(y.stops[2],2));
+  return out;
+}
+// 出現フラグの集合から読める「信号」：ハズレでも出るか／どのボーナス・どの小役（単独）で出るか。重複(k＋j)はボーナス側に数える（＝ボーナス成立中）。
+function boardSignal(flags,sts){const S=sts.filter(s=>flags.includes(s.key));
+  const hazure=S.some(s=>s.b<0&&s.m<0);
+  const bonuses=[...new Set(S.filter(s=>s.b>=0).map(s=>s.b))].sort((a,b)=>a-b);
+  const smalls=[...new Set(S.filter(s=>s.b<0&&s.m>=0).map(s=>s.m))].sort((a,b)=>a-b);
+  const code=hazure?'hazure':bonuses.length&&!smalls.length?'bonus':bonuses.length?'bonusOrSmall':smalls.length?'small':'none';
+  return {code,hazure,bonuses,smalls};}
+// 出目の一言メモ：head＝出目の種類（どのリーチ目/チャンス目/取りこぼし目/入賞か）、note＝出現フラグから読める意味。
+// useCtl＝true なら note を「制御で出うるフラグ」（signalCtl）基準で読む。
+function boardMemo(e,cfg,big,useCtl){
+  const eyeNm=(idx,list)=>idx.map(i=>`[${list[i].uid}] ${list[i].name}`).join('・');
+  const smNm=idx=>idx.map(j=>cfg.smallRoles[j].name).join('・');
+  const sg=(useCtl&&e.signalCtl)?e.signalCtl:e.signal;
+  const missTxt=e.miss.length?`＋取りこぼし目 ${eyeNm(e.miss,cfg.missEyes)}`:'';
+  const smWin=e.small.length?`（小役「${smNm(e.small)}」入賞形）`:'';
+  let head;
+  switch(e.kind){
+    case 'ボーナス':head=`◆ボーナス「${e.bonus.map(k=>cfg.bonuses[k].name).join('・')}」揃い`;break;
+    case 'リーチ目':head=`★リーチ目 ${eyeNm(e.reach,cfg.reachEyes)}`+(e.chance.length?`＋チャンス目 ${eyeNm(e.chance,cfg.reachEyes)}`:'')+smWin+missTxt;break;
+    case 'チャンス目':head=`◎チャンス目 ${eyeNm(e.chance,cfg.reachEyes)}`+smWin+missTxt;break;
+    case '小役':head=`●小役「${smNm(e.small)}」入賞`+missTxt;break;
+    case '取りこぼし目':head=`▽取りこぼし目 ${eyeNm(e.miss,cfg.missEyes)}（対象:${[...new Set(e.miss.map(i=>cfg.smallRoles[cfg.missEyes[i].target].name))].join('・')}）`;break;
+    default:head='通常目';
+  }
+  return {head,note:signalNote(sg,cfg,big,e.kind)};
+}
+// 出現フラグの信号 sg（boardSignal）を一言に。kind＝出目の種別（小役/ボーナスの入賞形は読み方が異なる）
+function signalNote(sg,cfg,big,kind){const nB=cfg.bonuses.length;
+  const bTxt=(sg.bonuses.length===nB&&nB>1)?'全ボーナス':sg.bonuses.map(k=>cfg.bonuses[k].name).join('・');
+  const sTxt=sg.smalls.map(j=>cfg.smallRoles[j].name).join('・');
+  if(sg.code==='none')return '優先順位どおりの制御では出ない（禁止目ではないので止まりうるが、ValidSlips が選ばない）';
+  if(kind==='ボーナス')return 'ボーナス入賞';
+  if(kind==='小役')return (sg.bonuses.length&&!sg.smalls.length)?`重複時のみ揃う形＝ボーナス確定（${bTxt}）`:sg.bonuses.length?'小役成立（ボーナス重複の可能性あり）':'小役成立';
+  if(sg.code==='hazure')return kind==='通常目'?(big?'BIG中ハズレでも出る通常目':'ハズレでも出る通常のハズレ目'):`${big?'BIG中ハズレ':'ハズレ'}でも出る（信号にならない）`;
+  if(sg.code==='bonus')return `ボーナス確定（${bTxt}）`;
+  if(sg.code==='bonusOrSmall')return `ボーナス（${bTxt}）or 小役（${sTxt}）の取りこぼし`;
+  return `小役（${sTxt}）の取りこぼし時のみ（ボーナス非成立）`; // code==='small'
+}
+// 盤面の強調セル：整列ライン（ボーナス/小役）＋一致したリーチ目/チャンス目/取りこぼし目の条件セル
+function boardHiCells(e,cfg){const cells=[];
+  const line=forms=>forms.forEach(sym=>cfg.lines.forEach(L=>{if(matchLineRole(sym,L,e.stops,cfg.reels))[0,1,2].forEach(j=>{if(sym[j]!=='*')cells.push({reel:j,row:L.rows[j]});});}));
+  e.bonus.forEach(k=>line(roleForms(cfg.bonuses[k])));
+  e.small.forEach(j=>line(cfg.smallRoles[j].forms.map(f=>f.sym)));
+  e.reach.concat(e.chance).forEach(i=>cfg.reachEyes[i].cells.forEach(c=>cells.push(c)));
+  e.miss.forEach(i=>cfg.missEyes[i].cells.forEach(c=>cells.push(c)));
+  return cells;}
 function generate(cfg){
   const errors=[],warnings=[];
   if(!cfg.bonuses.length)errors.push('ボーナスが1つも定義されていません');
@@ -781,7 +911,7 @@ function generate(cfg){
       bonuses:cfg.bonuses,smallRoles:cfg.smallRoles,reachEyes:cfg.reachEyes.map((r,i)=>({uid:r.uid,name:r.name,bonus:reReport[i].bonus,kakutei:reReport[i].kakutei,chance:!!r.chance,hazReels:r.hazReels,cells:r.cells})),
       missEyes:(cfg.missEyes||[]).map(me=>({uid:me.uid,name:me.name,small:(cfg.smallRoles[me.target]?cfg.smallRoles[me.target].name:''),hazReels:me.hazReels,cells:me.cells}))},
     control,validator,report:{ok,states:states.map(s=>s.key),definedReachEyes:reReport,definedMissEyes:missReport,coverage:cov,warnings,errors,boardCounts}};
-  return {ok,errors,warnings,reReport,reBoards,missReport,missBoards,coverage:cov,json,traps:{hard:trapHard.slice(0,8),soft:trapSoft.slice(0,8)},
+  return {ok,errors,warnings,reReport,reBoards,missReport,missBoards,coverage:cov,json,states,boards,traps:{hard:trapHard.slice(0,8),soft:trapSoft.slice(0,8)},
     stats:{states:states.length,haz:hazBoards.size,types:cfg.bonuses.length,smalls:cfg.smallRoles.length}};
 }
 function parseReel(s){return s.trim().split(/\s+/).filter(x=>x.length);}
@@ -812,6 +942,7 @@ function cellChipRE(val,size){
 }
 let symSeq=0,reachSeq=0,bonusSeq=0,missSeq=0;
 let lastJson=null,lastReBoards=[],lastCfg=null;
+let lastRes=null,boardCache={}; // 直近の generate 結果（状態別到達盤面）と、出目一覧の分類キャッシュ（mode→classifyBoards結果）
 function el(id){return document.getElementById(id);}
 function symById(id){return symbols.find(s=>s.id===id);}
 function symIds(){return new Set(symbols.map(s=>s.id));}
@@ -1159,9 +1290,11 @@ function run(){ // オーバーレイを表示→2重rAFで1フレーム描画�
 function runCore(){
   REF=+el('refRow').value;
   const cfg=readConfig();const ve=validateConfig(cfg);const R=el('result');
-  if(ve.length){R.innerHTML=`<div class="msg err"><b>入力エラー</b><br>${ve.join('<br>')}</div>`;el('btnDl').disabled=true;return;}
+  if(ve.length){R.innerHTML=`<div class="msg err"><b>入力エラー</b><br>${ve.join('<br>')}</div>`;el('btnDl').disabled=true;el('btnEye').disabled=true;el('btnBoards').disabled=true;lastRes=null;return;}
   const t0=performance.now();const res=generate(cfg);const ms=Math.round(performance.now()-t0);
   lastJson=res.ok?res.json:null;el('btnDl').disabled=!res.ok;el('btnCs').disabled=!res.ok;lastReBoards=res.reBoards||[];lastCfg=cfg;
+  // 出目一覧はエラー時も表示可（ガセ目・専用漏れ等を目視確認できる）。リーチ目データ出力は制御JSONと同じく検証成功時のみ。
+  lastRes=res;boardCache={};el('btnEye').disabled=!res.ok;el('btnBoards').disabled=false;
   let h='';
   if(res.ok)h+=`<div class="msg ok"><b>✔ 検証成功</b>（全 ${res.stats.states} 状態で袋小路なし・ボーナス${res.stats.types}種・小役${res.stats.smalls}種・${ms}ms）。制御JSON / C# をダウンロードできます。</div>`;
   else h+=`<div class="msg err"><b>✘ エラー ${res.errors.length}件（JSON未出力）</b><br>${res.errors.slice(0,40).map(escapeHtml).join('<br>')}</div>`;
@@ -1230,12 +1363,7 @@ function tBump(r,d){const n=lastCfg.reels[r].length;tPush[r]=((tPush[r]+d)%n+n)%
 // （引き込める→引き込みのみ／引き込めずリーチ目可→リーチ目のみ／どちらも不可→通常目のみ）
 function tValidSlips(co,step,prior,push){const reel=co.seq[step-1],n=lastCfg.reels[reel].length;
   const sit=step===1?co.s1:step===2?(co.s2[prior[0]]):(co.s3[prior[0]*100+prior[1]]);if(!sit)return{slips:[],sit:null};
-  const pri=[0,1,2,3,4],ALIGN=['両立','重複専用','小役','ボーナス'],MISS=['取りこぼし目'],MISS_AIM=['取りこぼし目狙い'],REACH=['リーチ目','チャンス目'];
-  // topOnly＝取りこぼし禁止（§6-a2）：最上位の非空 align tier（＝網羅最大バンド）で打ち切る
-  const grab=(names,topOnly)=>{const out=[];for(let i=0;i<sit.tiers.length;i++){if(names&&!names.includes(co.tierNames[i]))continue;const t=sit.tiers[i];const before=out.length;for(const s of pri){const stop=((push-s)%n+n)%n;if((t>>stop)&1)out.push(s);}if(topOnly&&out.length>before)break;}return out;};
-  const grabLose=()=>{const out=[];for(const s of pri){const stop=((push-s)%n+n)%n;if((sit.lose>>stop)&1)out.push(s);}return out;};
-  let slips=grab(ALIGN,!!co.noMiss);if(!slips.length)slips=grab(MISS);if(!slips.length)slips=grab(MISS_AIM);if(!slips.length)slips=grab(REACH);if(!slips.length)slips=grabLose();
-  return{slips,sit};}
+  return{slips:topSlips(co,sit,push,n),sit};} // ALIGN→MISS(確定)→MISS_AIM(狙い)→REACH→LOSE（取りこぼし禁止は align 最上位バンドのみ）
 function tClassOfStop(co,sit,stop){for(let i=0;i<sit.tiers.length;i++)if((sit.tiers[i]>>stop)&1)return co.tierNames[i];if((sit.lose>>stop)&1)return '通常目';return '不可';}
 // 種別の表記：ボーナス単独の「リーチ目」tierはリーチ目と取りこぼし目を同順位で合成しているため、
 // 完成盤面が「取りこぼし目のみ（リーチ目ではない）」なら種別を『取りこぼし目』と表記して出目と一致させる。board=完成盤面（未完成はnull）。
@@ -1355,6 +1483,183 @@ function miniBoardSlips(stops,cells,slipNums,slipCols){const cset=new Set(cells.
   return h+'</div>';}
 function fillPreview(i){const c=el('prev_'+i);if(!c||c.dataset.filled)return;c.dataset.filled='1';const keys=lastReBoards[i]||[];const cells=lastCfg.reachEyes[i].cells;const N=12;if(!keys.length){c.innerHTML='<small>該当する実出目がありません（到達不能）。</small>';return;}c.innerHTML=keys.slice(0,N).map(k=>miniBoard(keyToStops(k),cells)).join('')+(keys.length>N?`<div class="morerow"><button class="sec tiny" onclick="showAllPreview(${i})">全 ${keys.length} 件を表示</button></div>`:'');}
 function showAllPreview(i){const c=el('prev_'+i);const keys=lastReBoards[i]||[];const cells=lastCfg.reachEyes[i].cells;const CAP=600;c.innerHTML=keys.slice(0,CAP).map(k=>miniBoard(keyToStops(k),cells)).join('')+(keys.length>CAP?`<div class="morerow"><small>表示は先頭${CAP}件（全${keys.length}件）</small></div>`:'');}
+/* ===== 全出目一覧（オーバーレイ） ===== */
+const BOV_PAGE=150; // 1ページの表示件数（図柄画像入りで数千枚を一度に描くと重いためページ送り）
+const KIND_CLS={'通常目':'kn','リーチ目':'kr','チャンス目':'kc','取りこぼし目':'km','小役':'ks','ボーナス':'kb'};
+let bovPage=0,bovKinds=new Set(BOARD_KINDS);
+// 状態別「制御で出うる盤面」（boardsFromValidSlips）。重いので初回利用時に計算して res にキャッシュ。
+function ctlBoardsOf(res){if(!res.ctlBoards){res.ctlBoards={};res.states.forEach(s=>{res.ctlBoards[s.key]=boardsFromValidSlips(res.json.control[s.key],lastCfg);});}return res.ctlBoards;}
+function boardSetOf(mode){if(!lastRes||!lastCfg)return [];if(!boardCache[mode])boardCache[mode]=classifyBoards(lastCfg,lastRes.states,lastRes.boards,mode,ctlBoardsOf(lastRes));return boardCache[mode];}
+function openBoardList(){if(!lastRes)return;
+  const hasBig=lastRes.states.some(s=>s.big);const ms=el('bovMode'),cur=ms.value;
+  ms.innerHTML='<option value="normal">通常時</option>'+(hasBig?'<option value="big">BIG中</option>':'');ms.value=(cur==='big'&&hasBig)?'big':'normal';
+  bovPage=0;el('boardsOverlay').classList.add('on');renderBoardList();}
+function closeBoardList(){const o=el('boardsOverlay');if(o&&o.classList)o.classList.remove('on');}
+function bovToggleKind(k){if(bovKinds.has(k))bovKinds.delete(k);else bovKinds.add(k);bovPage=0;renderBoardList();}
+function bovSoloKind(k){bovKinds=new Set(k?[k]:BOARD_KINDS);bovPage=0;renderBoardList();}
+function bovGo(p){bovPage=p;renderBoardList();el('bovList').scrollTop=0;}
+function renderBoardList(){const cfg=lastCfg;if(!cfg||!lastRes)return;
+  const mode=el('bovMode').value||'normal',big=mode==='big';
+  const fs=el('bovFlag'),fcur=fs.value;const keys=lastRes.states.filter(s=>!!s.big===big).map(s=>s.key);
+  fs.innerHTML='<option value="">全フラグ</option>'+keys.map(k=>`<option value="${escAttr(k)}">${escapeHtml(k)}</option>`).join('');fs.value=keys.includes(fcur)?fcur:'';
+  const ctl=el('bovBasis').value!=='legal'; // 基準：制御（ValidSlips 採用時に出る）／合法（禁止目を回避できる停止で止まりうる）
+  const fl=e=>ctl?e.flagsCtl:e.flags;
+  const all0=boardSetOf(mode),all=ctl?all0.filter(e=>e.flagsCtl.length):all0,flag=fs.value;
+  const byFlag=flag?all.filter(e=>fl(e).includes(flag)):all;
+  const cnt={};BOARD_KINDS.forEach(k=>cnt[k]=0);byFlag.forEach(e=>cnt[e.kind]++);
+  el('bovKinds').innerHTML=BOARD_KINDS.map(k=>`<span class="kchip${bovKinds.has(k)?' on':''}" onclick="bovToggleKind('${k}')" ondblclick="bovSoloKind('${k}')" title="クリックで表示ON/OFF・ダブルクリックでこの種別だけ表示"><span class="bcard ${KIND_CLS[k]}" style="display:inline;border:none;padding:0;background:none;"><span class="ktag">${k}</span></span> ${cnt[k]}</span>`).join('')+
+    `<span class="kchip" onclick="bovSoloKind('')" title="全種別を表示">全て</span>`;
+  const list=byFlag.filter(e=>bovKinds.has(e.kind));
+  const pages=Math.max(1,Math.ceil(list.length/BOV_PAGE));if(bovPage>=pages)bovPage=pages-1;
+  const from=bovPage*BOV_PAGE,view=list.slice(from,from+BOV_PAGE);
+  el('bovSummary').textContent=`${big?'BIG中':'通常時'}の${ctl?'制御で出る':'止まりうる'}出目 ${all.length}通り`+(flag?`／フラグ「${flag}」で出る ${byFlag.length}通り`:'')+`／表示中の種別 ${list.length}通り`;
+  el('bovList').innerHTML=view.length?view.map((e,i)=>{const m=boardMemo(e,cfg,big,ctl);
+    const tip=`制御で出るフラグ: ${e.flagsCtl.join(' / ')||'なし'}\n止まりうるフラグ（合法）: ${e.flags.join(' / ')}`;
+    return `<div class="bcard ${KIND_CLS[e.kind]}" title="${escAttr(tip)}"><div class="bchead"><span class="ktag">${e.kind}</span><span class="bno">#${from+i+1}</span></div>${miniBoard(e.stops,boardHiCells(e,cfg))}<div class="bmemo">${escapeHtml(m.head)}</div><div class="bsig">→ ${escapeHtml(m.note)}</div></div>`;}).join('')
+    :'<small>該当する出目がありません。</small>';
+  let pg=`<button class="sec tiny" onclick="bovGo(0)" ${bovPage===0?'disabled':''}>« 先頭</button><button class="sec tiny" onclick="bovGo(${bovPage-1})" ${bovPage===0?'disabled':''}>‹ 前</button>`+
+    `<span>${list.length?`${from+1}〜${from+view.length} 件目 / ${list.length}件（${bovPage+1}/${pages}ページ）`:'0件'}</span>`+
+    `<button class="sec tiny" onclick="bovGo(${bovPage+1})" ${bovPage>=pages-1?'disabled':''}>次 ›</button><button class="sec tiny" onclick="bovGo(${pages-1})" ${bovPage>=pages-1?'disabled':''}>末尾 »</button>`;
+  if(pages>2)pg+=`<select onchange="bovGo(+this.value)" style="background:var(--code);color:var(--ink);border:1px solid var(--border);border-radius:7px;padding:3px 6px;">${Array.from({length:pages},(_,p)=>`<option value="${p}"${p===bovPage?' selected':''}>${p+1}ページ</option>`).join('')}</select>`;
+  el('bovPager').innerHTML=pg;}
+
+/* ===== リーチ目／取りこぼし目データ出力（AI向け日本語解説付き） ===== */
+function symLabel(id){const s=symById(id);return s?s.label:id;}
+const WIN_ROWS=['枠上','上段','中段','下段','枠下']; // row -1..3
+function windowOf(stops,cfg){return [-1,0,1,2,3].map(row=>`${WIN_ROWS[row+1]}[${[0,1,2].map(r=>symLabel(symAtRow(cfg.reels[r],stops[r],row))).join('|')}]`).join(' ');} // 例 "枠上[ﾘﾌﾟ|ﾘﾌﾟ|ﾘﾌﾟ] 上段[赤7|赤7|REG] …"（L|C|R）
+function eyeCondText(e){const t=e.cells.map(c=>`${RLET[c.reel]}${WIN_ROWS[c.row+1]}${c.neg?'≠':'='}${c.syms.map(symLabel).join('/')}`);
+  (e.hazReels||[]).forEach(r=>t.push(`${RLET[r]}リール=小役ハズレ（${RLET[r]}リールの図柄を使う小役が1つも揃っていない）`));return t;}
+function stateKindLabel(s){return s.big?(s.m<0?'BIG中ハズレ':'BIG中小役'):(s.b<0&&s.m<0)?'ハズレ':s.b<0?'小役単独':s.m<0?'ボーナス単独':'重複（ボーナス＋小役）';}
+function eyeDataReadme(cfg){const ref=['上段','中段','下段'][REF];return [
+  '# このファイルについて（AI向け解説）',
+  'これはパチスロ（3リール）のリール制御ツール「全状態 リール制御 ＆ バリデータ生成」が出力した、フラグ（内部成立役）別の「リーチ目」「チャンス目」「取りこぼし目」の全実出目データです。',
+  '本ファイルは“出目の辞書”であり、制御そのもの（各停止で何コマ滑らせてよいか）は含みません。制御は同じツールが出力する reel-control.json / ReelStopValidator.cs（ValidSlips）が担当します。ゲームを作る場合はそれらを使ってください。手元に無い場合でも、下の「制御の規則」で同じ出目集合を再現できるように規則を全て記載しています。',
+  '',
+  '## 用語',
+  '- フラグ（状態）: その回のゲームで内部的に成立している役。キー例「ハズレ」「小役:ベル」「ボーナス:赤7BIG」「ボーナス:赤7BIG+小役:リプレイ」（重複＝ボーナスと小役が同時成立）「BIG中:ハズレ」「BIG中:小役:JAC」。一覧は「フラグ一覧」。',
+  '- 出目: 3リール停止後の盤面。3リールの停止位置（stops）で一意に決まる。',
+  '- リーチ目: ボーナス成立時にしか出ない目（純ハズレ・小役単独では制御が絶対に出さない）。出たらボーナス確定。定義の種別「リーチ目」。対象ボーナスを持ち、対象外のボーナスが成立している時（重複を含む）は出ない。',
+  '- チャンス目: 「チャンス目可」ONのリーチ目。ボーナス成立時に加え、小役単独成立時（取りこぼし時）にも出せる＝「ボーナス or 小役取りこぼし」の曖昧な目。純ハズレでは出ない。条件にリールの「小役ハズレ」を含むものは「小役ハズレ目（チャンス目）」。',
+  '- 取りこぼし目: 対象小役を取りこぼした時に（リーチ目より先に）優先して狙う目。禁止目ではない＝確定目ではない。どのフラグで出ても制御上は不問なので、ハズレ等で出ることもある（その場合は出現フラグに現れる）。ボーナス単独成立時もリーチ目と同順位で狙われる。',
+  '- 通常目: 上記のどれでもなく、何も揃っていない目。',
+  '- 小役揃い型: 小役の入賞形そのものを条件に含むリーチ目/チャンス目（リーチ目リプレイ等）。この型だけは小役が揃っていても目として成立する。それ以外のリーチ目/チャンス目は「何かの小役が揃っている盤面」では成立しない（小役入賞として扱う）。',
+  '- 重複専用（小役の揃い形の属性）: その揃い形は、指定ボーナスとの重複フラグ（例「ボーナス:赤7BIG+小役:リプレイ」）の時だけ揃えてよい形。他のすべてのフラグでは禁止目。出たら対象ボーナスとの重複が確定する（リーチ目リプレイ等）。',
+  '- 取りこぼし禁止（小役の属性）: その小役は全押し位置で必ず揃える（取りこぼさない）と宣言した役。制御は引き込み候補のうち「後リールでも必ず揃えられる停止」だけを返す。リール配置上保証できない場合はツールの検証でエラーになるので、本ファイルが出力されている＝保証済み。出目の集合（合法）には影響しない。',
+  '',
+  '## 盤面の座標規則',
+  '- リールは L(左)・C(中)・R(右) の3本。各リールの図柄配列は「リール」に index 0 から順に記載。index が増える方向がリール帯の下方向（窓の上段→中段→下段の順に index が 1 ずつ増える）。図柄 id と表示名の対応は「図柄」。',
+  `- stops = {L,C,R} は各リールで基準段（このデータでは「${ref}」）に止まっている図柄の index（0始まり）。`,
+  `- 段 row（枠上=-1, 上段=0, 中段=1, 下段=2, 枠下=3）に見える図柄 = reel[(stop + row - ${REF}) mod 図柄数]。各出目の「窓」はこの計算結果（"段[L|C|R]"）。枠上・枠下は有効ライン外だが、リーチ目の条件には使える。`,
+  '- 有効ラインは「有効ライン」に記載（rows は L,C,R 各リールの段）。通常時・BIG中とも同じ5ライン（モード別のライン指定は無い）。役は有効ライン上に揃い形が並ぶと入賞（揃い形の「*」はどの図柄でもよい）。',
+  '- 出目 id は "L{stop}-C{stop}-R{stop}"（BIG中は先頭に "BIG:"）。',
+  '',
+  '## 制御の規則（出目集合の再現に必要なすべて）',
+  `- 押し位置 push＝ボタンを押した瞬間に基準段（${ref}）にある図柄 index。スベリ slip は 0〜4 コマ。停止位置 stop = (push − slip) mod 図柄数（リールは index が減る向きに滑る＝図柄が上から下へ流れる）。`,
+  '- 押し順は2通りのみ: 順押し（L→C→R）とハサミ（L→R→C）。第1停止は常に L。',
+  '- 各フラグには禁止目がある（そのフラグでは絶対に出さない盤面）:',
+  '  - ハズレ: 全リーチ目・全チャンス目／全小役の整列（重複専用形を含む）／全ボーナスの整列。',
+  '  - 小役単独（小役X）: 全ボーナスの整列／X 以外の小役の整列／X の重複専用形／チャンス目可OFFのリーチ目（チャンス目可ONの目は可）。',
+  '  - ボーナス単独（ボーナスK）: K 以外のボーナスの整列／全小役の整列（重複専用形を含む）／K を対象に含まないリーチ目・チャンス目。K の整列は可。',
+  '  - 重複（ボーナスK＋小役X）: K 以外のボーナスの整列／X 以外の小役の整列／K を対象に含まないリーチ目・チャンス目（＝ボーナス単独と同じく対象外ボーナスのリーチ目は禁止）／K 以外が対象の X の重複専用形。K の整列・K 対象のリーチ目・取りこぼし目は禁止ではない（出てもよい）。',
+  '  - BIG中ハズレ: 全ボーナスの整列（7揃い等も禁止）／BIG中に有効な全小役の整列／「通常時のみ」の小役の整列。リーチ目・チャンス目は判定しない（出てもよい）。',
+  '  - BIG中小役X: 全ボーナスの整列／X 以外の小役の整列（「通常時のみ」の小役を含む）。リーチ目・チャンス目は判定しない。',
+  '  - 小役のモード: 「BIG中のみ」の小役は通常時は存在しない扱い（揃っても入賞でも禁止目でもない＝ただの目）。「通常時のみ」の小役は BIG中は揃えてはいけない（禁止目）。',
+  '  - 取りこぼし目はどのフラグでも禁止目にならない。',
+  '- 「Xリール=小役ハズレ」という条件: その出目で、揃い形の X リール位置に「*」以外の図柄を指定している小役が、どの有効ライン上でも1つも揃っていないこと。対象の小役は、リーチ目/チャンス目では通常時に有効な小役、取りこぼし目では対象小役のモード（BIG中のみの小役ならBIG中）に有効な小役。',
+  '- 合法な停止（袋小路の回避を含む）: 押し順の第1〜第3停止を a,b,c とする。',
+  '  - 第3停止 c は「完成盤面が禁止目でない」なら合法。',
+  '  - 第2停止 b は「c のどの押し位置でも 0〜4 コマ以内に合法な c がある」なら合法。',
+  '  - 第1停止 a は「b のどの押し位置でも 0〜4 コマ以内に合法な b がある」なら合法。',
+  '- 優先順位（ValidSlips）: 各停止で、押し位置から 0〜4 コマ以内の合法停止をグループに分け、達成可能な最上位グループのスベリだけを返す（グループの順: 引き込み → 取りこぼし目（その停止で確定するもの → 後リール次第で狙えるもの）→ リーチ目/チャンス目 → 通常目）。ゲームは返された中から1つ選ぶ。同グループ内の並びは「後リールで揃えられる押し位置が多い停止」→ スベリの小さい順。',
+  '  - 「引き込める停止」＝その停止から、禁止目を避けて目標（役の揃い形・目）が完成する盤面が1つでも存在する停止。完成させると必ず禁止目になる停止は引き込みに数えない。',
+  '  - フラグ別のグループ構成: ハズレ＝通常目のみ／小役単独X＝X引き込み → Xの取りこぼし目 → チャンス目可の目 → 通常目／ボーナス単独K＝K引き込み → Kのリーチ目と全取りこぼし目（同順位）→ 通常目／重複K＋X＝Xの重複専用形 → X引き込み → Xの取りこぼし目 → 通常目（ボーナスもリーチ目も狙わない。ボーナス整列・K対象のリーチ目は禁止ではないので、合法停止の組合せ次第で出ることはある）／BIG中ハズレ＝通常目のみ／BIG中小役X＝X引き込み → Xの取りこぼし目 → 通常目（リーチ目は狙わない）。',
+  '  - 小役単独では「小役が揃い、かつチャンス目/取りこぼし目にもなる盤面」は目のグループに回し、目を伴わない入賞を優先して引き込む。',
+  '  - 取りこぼし禁止の小役は、引き込みグループのうち後リールで必ず揃えられる停止だけを返す。',
+  '',
+  '## 「出現フラグ」の2つの基準（重要）',
+  '- 出現フラグ_制御: 全押し順×全押し位置で、各停止に ValidSlips が返したスベリのどれかを採用した場合に止まりうるフラグ。優先順位を反映した、実際のゲームで出る出目。ゲーム・演出・期待度にはこちらを使う。',
+  '- 出現フラグ_合法: 禁止目と袋小路を回避できる停止（合法停止）すべての組合せで止まりうるフラグ。優先順位で絞る前の上限（出現フラグ_制御 ⊆ 出現フラグ_合法）。例: チェリー成立時、優先順位上は出ない通常目もここには含まれる。制御の誤りを調べる（この範囲外の出目は禁止目＝絶対に出てはいけない）用途向け。',
+  '- どちらも“止まりうるか”（可能性）であり、出現頻度ではない。頻度は押し位置の分布とフラグの抽選確率で決まる。',
+  '',
+  '## データの構成',
+  '- 定義_リーチ目: 定義されたリーチ目/チャンス目。条件（例 "L上段=赤7"、"C中段≠BAR"、"R上段=赤7/ワシ"＝どちらか、"Rリール=小役ハズレ"。条件の無いマスは何でもよい）、対象ボーナス、確定段階（1確=1リールの条件だけで成立 等）、小役揃い型、実出目数・読み方・出現フラグ別出目数（_制御／_合法）。',
+  '- 定義_取りこぼし目: 同様。対象小役を持つ。',
+  '- 出目: リーチ目・チャンス目・取りこぼし目のどれかに一致する出目（合法で止まりうるもの）を全て列挙。ボーナス揃いの盤面は目ではないので含まない。分類は1出目1種別で、優先は リーチ目＞チャンス目＞小役入賞（小役揃い型でない目は小役が揃うと成立しないため、ここで小役になるのは他小役の取りこぼし目と重なる場合のみ）＞取りこぼし目。出現フラグ_制御 が空の出目は「合法だが優先順位どおりの制御では出ない」。',
+  '- フラグ別: 各フラグについて「制御」「合法」それぞれの出目総数・種別内訳（通常目/リーチ目/チャンス目/取りこぼし目/小役/ボーナス の件数。全出目が対象）と、そのフラグで出るリーチ目/チャンス目/取りこぼし目（ID別の出目数）と出目ID。出目ID は「出目」に列挙した目の出目のみ（通常目・小役入賞・ボーナス揃いは件数だけ）。',
+  '- 信号（出現フラグから機械的に導いた意味。_制御／_合法）: hazure=ハズレでも出る（何の信号にもならない）／bonus=ボーナス確定／bonusOrSmall=ボーナス or 小役取りこぼし／small=小役取りこぼし時のみ（ボーナス非成立）／none=その基準では出ない。',
+  '',
+  '## このツールの範囲外（ゲーム側で決めること）',
+  '- フラグの抽選確率、配当（払い出し枚数）、ボーナスの種類ごとの内容・終了条件、告知のタイミング。',
+  '- REG中・JACゲームなど BIG中以外のボーナス中モード: このツールのモードは「通常時」と「BIG中」の2つだけ。REG中を作る場合、REG中に成立しうる小役が BIG中と同じなら BIG中のフラグの制御を流用できる（ボーナス整列は禁止・リーチ目は判定しない）。異なる場合はツール側でモードを追加する必要がある。',
+  '- BIG中にボーナスは成立しない前提（BIG中のボーナス/重複フラグは無い）。',
+  '',
+  '## ゲームでの使い方',
+  '1. 告知・演出: 全リール停止後に stops から出目 id を作り「出目」を引く。信号_制御 が bonus ならボーナス確定として告知や演出を出してよい。bonusOrSmall（チャンス目・取りこぼし目）なら「ボーナスかも」の煽り演出に使う。出目に無い id は通常目または小役入賞（意味を持たない目）。',
+  '2. 整合チェック（デバッグ）: そのゲームの内部フラグが、止まった出目の 出現フラグ_制御 に含まれているかを確認する。出現フラグ_合法 にも無ければ禁止目が出ている＝制御の不具合。',
+  '3. 期待度の計算: P(ボーナス | 出目) = Σ_{ボーナス系フラグf} P(f)·P(出目|f) / Σ_{全フラグf} P(f)·P(出目|f)。P(出目|f) が 0 か非0 かは 出現フラグ_制御 で分かる（具体値は押し位置分布を仮定して ValidSlips でシミュレーションする）。信号_制御 が bonus の出目は期待度100%。',
+  '4. 攻略情報・解析表: 定義_リーチ目 の条件と実出目から「この形が出たらボーナス確定」「チャンス目（ボーナス or 小役こぼし）」の一覧を作る。プレイヤー向け解説やリーチ目クイズの生成にも使える。',
+  '5. 設計レビュー: 意図したフラグでだけ目が出ているか（リーチ目の出現フラグにハズレや対象外ボーナスが無いか、チャンス目・取りこぼし目が小役取りこぼしで出せるか）を確認する。',
+  '',
+  '## AIへの依頼例',
+  '- 「出目 L3-C12-R7 は何？」→「出目」から id を探し、分類・メモ・出現フラグ_制御 で答える（無ければ通常目または小役入賞）。',
+  '- 「赤7BIG成立時に出るリーチ目を全部挙げて」→「フラグ別」の「ボーナス:赤7BIG」と「ボーナス:赤7BIG+小役:…」の 制御.リーチ目 を参照。',
+  '- 「ベル取りこぼし時に出る目は？」→「フラグ別」の「小役:ベル」の 制御.取りこぼし目／制御.チャンス目 を参照。',
+];}
+function buildEyeExport(res,cfg){
+  const modes=[{mode:'normal',label:'通常時'}];if(res.states.some(s=>s.big))modes.push({mode:'big',label:'BIG中'});
+  const ctlB=ctlBoardsOf(res); // 状態別「制御で出うる盤面」（ValidSlips の返り値を採用した場合）
+  const reTag=i=>`[${cfg.reachEyes[i].uid}] ${cfg.reachEyes[i].name}`,meTag=i=>`[${cfg.missEyes[i].uid}] ${cfg.missEyes[i].name}`;
+  const agg=()=>({合法:{n:0,flags:{}},制御:{n:0,flags:{}}});
+  const reAgg=cfg.reachEyes.map(agg),meAgg=(cfg.missEyes||[]).map(agg);
+  const basisObj=()=>{const o={出目総数:0,内訳:{},リーチ目:{},チャンス目:{},取りこぼし目:{},出目ID:[]};BOARD_KINDS.forEach(k=>o.内訳[k]=0);return o;};
+  const byFlag={};res.states.forEach(s=>{byFlag[s.key]={種別:stateKindLabel(s),制御:basisObj(),合法:basisObj()};});
+  const boardsOut=[];
+  const bump=(o,k)=>{o[k]=(o[k]||0)+1;};
+  modes.forEach(({mode,label})=>{const big=mode==='big';
+    classifyBoards(cfg,res.states,res.boards,mode,ctlB).forEach(e=>{
+      const isEye=!!(e.reach.length||e.chance.length||e.miss.length); // 意味を持つ目（リーチ目系・取りこぼし目）のみ「出目」に列挙
+      const id=(big?'BIG:':'')+`L${e.stops[0]}-C${e.stops[1]}-R${e.stops[2]}`;
+      [['合法',e.flags],['制御',e.flagsCtl]].forEach(([bs,flags])=>{
+        flags.forEach(f=>{const B=byFlag[f][bs];B.出目総数++;B.内訳[e.kind]++;
+          if(!isEye)return;B.出目ID.push(id);e.reach.forEach(i=>bump(B.リーチ目,reTag(i)));e.chance.forEach(i=>bump(B.チャンス目,reTag(i)));e.miss.forEach(i=>bump(B.取りこぼし目,meTag(i)));});
+        if(!isEye||!flags.length)return;
+        e.reach.concat(e.chance).forEach(i=>{const a=reAgg[i][bs];a.n++;flags.forEach(f=>bump(a.flags,f));});
+        e.miss.forEach(i=>{const a=meAgg[i][bs];a.n++;flags.forEach(f=>bump(a.flags,f));});});
+      if(!isEye)return;
+      const mc=boardMemo(e,cfg,big,true),ml=boardMemo(e,cfg,big,false);
+      boardsOut.push({id,モード:label,stops:{L:e.stops[0],C:e.stops[1],R:e.stops[2]},窓:windowOf(e.stops,cfg),分類:e.kind,
+        リーチ目:e.reach.map(reTag),チャンス目:e.chance.map(reTag),取りこぼし目:e.miss.map(meTag),小役入賞:e.small.map(j=>cfg.smallRoles[j].name),
+        出現フラグ_制御:e.flagsCtl,出現フラグ_合法:e.flags,信号_制御:e.signalCtl.code,信号_合法:e.signal.code,
+        メモ:mc.head+' ／ '+mc.note+(ml.note!==mc.note?`（合法停止まで含めると: ${ml.note}）`:'')});
+    });});
+  const stsOf=big=>res.states.filter(s=>!!s.big===big);
+  const eyeNote=(a,kind,big)=>{const ks=Object.keys(a.flags);return ks.length?signalNote(boardSignal(ks,stsOf(big)),cfg,big,kind):'出目なし';};
+  const nameOf=list=>list.map(k=>cfg.bonuses[k].name);
+  const eyeStats=(A,kind,big)=>({実出目数_制御:A.制御.n,実出目数_合法:A.合法.n,読み方_制御:eyeNote(A.制御,kind,big),読み方_合法:eyeNote(A.合法,kind,big),出現フラグ別出目数_制御:A.制御.flags,出現フラグ別出目数_合法:A.合法.flags});
+  return {
+    説明: eyeDataReadme(cfg),
+    生成情報:{ツール:'全状態 リール制御 ＆ バリデータ生成（slot-reel-control-generator.html）',生成日時:new Date().toISOString(),基準段:['上段','中段','下段'][REF],基準段index:REF,スベリ優先:cfg.slipPriority,検証:res.ok?'成功':'エラーあり',警告:res.warnings},
+    リール:{L:cfg.reels[0],C:cfg.reels[1],R:cfg.reels[2]},
+    図柄:Object.fromEntries(symbols.map(s=>[s.id,s.label])),
+    有効ライン:cfg.lines.map(l=>({name:l.name,rows:l.rows})),
+    ボーナス:cfg.bonuses.map(b=>({name:b.name,揃い形:roleForms(b)})),
+    小役:cfg.smallRoles.map(r=>({name:r.name,モード:{both:'通常＋BIG中',normal:'通常時のみ',big:'BIG中のみ'}[roleMode(r)],取りこぼし禁止:!!r.noMiss,揃い形:r.forms.map(f=>({形:f.sym,重複専用:!!f.dupOnly,対象ボーナス:f.dupOnly?nameOf(f.dupTargets||[]):undefined}))})),
+    フラグ一覧:res.states.map(s=>({key:s.key,種別:stateKindLabel(s),ボーナス:s.b>=0?cfg.bonuses[s.b].name:null,小役:s.m>=0?cfg.smallRoles[s.m].name:null,モード:s.big?'BIG中':'通常時'})),
+    定義_リーチ目:cfg.reachEyes.map((re,i)=>{const kind=re.chance?'チャンス目':'リーチ目';return Object.assign({uid:re.uid,name:re.name,種別:re.chance?(re.hasHaz?'小役ハズレ目（チャンス目）':'チャンス目'):'リーチ目',
+      対象ボーナス:nameOf(re.targets),確定段階:(res.reReport[i]||{}).kakutei,小役揃い型:!!reachEyePinsSmallWin(re,cfg),条件:eyeCondText(re)},eyeStats(reAgg[i],kind,false));}),
+    定義_取りこぼし目:(cfg.missEyes||[]).map((me,i)=>{const r=cfg.smallRoles[me.target];const big=!!r&&roleMode(r)==='big';return Object.assign({uid:me.uid,name:me.name,対象小役:r?r.name:'',条件:eyeCondText(me)},eyeStats(meAgg[i],'取りこぼし目',big));}),
+    フラグ別:byFlag,
+    出目:boardsOut,
+  };
+}
+function downloadEyeData(){if(!lastRes||!lastRes.ok||!lastCfg)return;
+  const data=buildEyeExport(lastRes,lastCfg);
+  // 出目／フラグ別の各要素は1行1件に詰めて出力（数千件でも行単位で読める・サイズ抑制）。他は字下げ付き。
+  const oneLine=obj=>'{\n'+Object.keys(obj).map(k=>'  '+JSON.stringify(k)+': '+JSON.stringify(obj[k])).join(',\n')+'\n }';
+  const text=JSON.stringify({...data,フラグ別:'__FLAGS__',出目:'__BOARDS__'},null,1)
+    .replace('"__FLAGS__"',()=>oneLine(data.フラグ別))
+    .replace('"__BOARDS__"',()=>'[\n'+data.出目.map(b=>'  '+JSON.stringify(b)).join(',\n')+'\n ]');
+  const blob=new Blob([text],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='reach-eye-data.json';a.click();URL.revokeObjectURL(url);}
 function download(){if(!lastJson)return;const blob=new Blob([JSON.stringify(lastJson,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='reel-control.json';a.click();URL.revokeObjectURL(url);}
 function saveProject(){
   const proj={v:1,symbols,symImages,reels,bonuses:bonusesData,smallRoles:smallRolesData,reachEyes:reachEyesData,missEyes:missEyesData,refRow:el('refRow').value};
@@ -1532,6 +1837,9 @@ function loadDefaults(){
 el('btnGen').addEventListener('click',run);
 el('btnDl').addEventListener('click',download);
 el('btnCs').addEventListener('click',downloadCS);
+el('btnEye').addEventListener('click',downloadEyeData);
+el('btnBoards').addEventListener('click',openBoardList);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeBoardList();});
 // 表題クリックでカード折りたたみ（既定は展開）。動的に生成される結果カードにも委譲で効く
 document.addEventListener('click',function(e){const h2=e.target.closest?e.target.closest('h2'):null;if(h2&&h2.parentElement&&h2.parentElement.classList.contains('card'))h2.parentElement.classList.toggle('collapsed');});
 loadDefaults();renderAll();applyDock();
